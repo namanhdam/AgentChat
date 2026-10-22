@@ -35,7 +35,13 @@ Nếu nhu cầu ưu tiên là GitHub/Drive/DB ngay, PM đề nghị đổi thứ
 
 Ước lượng sơ bộ của techlead, chưa phải lịch cam kết: probe 1–2 ngày kỹ thuật + 0,5–1 ngày QA; MVP Skill 3–5 ngày kỹ thuật + 1–2 ngày QA; MCP HTTP chỉ đọc 2–3 ngày kỹ thuật + 1 ngày QA. Ước lượng lại sau probe; chưa tính auth đặc thù hoặc yêu cầu hỗ trợ cả ba CLI ngay.
 
-Bước được đề xuất tiếp theo chỉ là probe Skill trên Claude. Trước khi chạy cần chốt phạm vi probe, số lượt/timeout và dữ liệu fixture; không tự cài server hay thay tài khoản thật từ kết luận nghiên cứu này. Kết quả probe mới là căn cứ chốt thiết kế tính năng và giao dev.
+Bước được đề xuất tiếp theo ở thời điểm T60 kết thúc là probe Skill trên Claude. Trước khi chạy cần chốt phạm vi probe, số lượt/timeout và dữ liệu fixture; không tự cài server hay thay tài khoản thật từ kết luận nghiên cứu này. Kết quả probe mới là căn cứ chốt thiết kế tính năng và giao dev.
+
+## Bổ sung sau T60: MCP Obsidian sẵn có
+
+End-User giới thiệu repo `/Users/namanh/Dev/mcp-obsidian` đang dùng trên Mac mini. PM đã khảo sát code local: Team Brain có sáu tool domain qua STDIO-over-SSH, trong đó role automation chỉ được ba tool đọc. [Đánh giá riêng](mcp-obsidian-assessment.md).
+
+Đề xuất điều chỉnh ca thử MCP sang Team Brain, gắn Skill tra cứu context/tri thức nhóm; có thể kiểm kết nối CLI nhỏ trước khi làm màn hình quản lý đầy đủ. Đây là nhu cầu cụ thể hơn server tài liệu mẫu. Cần thêm kiểm vòng đời SSH/remote process và danh tính giới hạn project; chưa kết nối Mac mini hoặc chốt triển khai từ việc đọc repo.
 
 ## Nghiệm thu T60 và nguồn
 

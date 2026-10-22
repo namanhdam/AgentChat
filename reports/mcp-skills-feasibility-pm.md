@@ -1,6 +1,6 @@
 # MCP và Skill trong Agent Chat — đề xuất PM để trao đổi với techlead
 
-PM · 2026-10-22 · code nền `07ac93337a`, v0.10.0. Trạng thái: khảo sát khả thi; chưa có kết luận chung hoặc quyết định triển khai.
+PM · 2026-10-22 · code nền `07ac93337a`, v0.10.0. Đây là đề xuất ban đầu, đã nhận phản biện T60; xem [kết luận PM–techlead](mcp-skills-direction.md). Chưa có quyết định triển khai.
 
 ## Mục đích và cách hiểu yêu cầu
 
@@ -23,7 +23,9 @@ End-User yêu cầu PM và techlead bàn về tính khả thi, phương hướng
 
 MCP nối agent với công cụ, dữ liệu và mẫu prompt của server; có kiểu chạy local qua stdio và kết nối remote qua Streamable HTTP. App phải xác định CLI hay chính app sẽ giữ vai trò client/host. [Kiến trúc MCP chính thức](https://modelcontextprotocol.io/docs/2026-07-28/learn/architecture).
 
-Skill là gói hướng dẫn có `SKILL.md`, có thể kèm tài liệu/script. Nên đưa tên/mô tả vào danh mục rồi đọc nội dung khi cần; Skill không tự tạo kết nối MCP hoặc cấp thêm quyền chạy lệnh. [Agent Skills](https://agentskills.io/home), [hướng dẫn tích hợp](https://agentskills.io/client-implementation/adding-skills-support).
+Skill là gói hướng dẫn có `SKILL.md`, có thể kèm tài liệu/script. Nên đưa tên/mô tả vào danh mục rồi đọc nội dung khi cần; định dạng này không tự tạo kết nối MCP. [Agent Skills](https://agentskills.io/home), [hướng dẫn tích hợp](https://agentskills.io/client-implementation/adding-skills-support).
+
+Đính chính sau phản biện T60: không thể nói chung rằng Skill không cấp quyền. Claude Code dùng `allowed-tools` để duyệt trước các tool trong lượt kích hoạt; nội dung Skill còn có thể dùng cơ chế nội suy lệnh. Vì vậy MVP đề xuất chỉ nhận gói hướng dẫn thuần, phải xem cả metadata lẫn nội dung, không coi nhãn Skill/readOnly là ranh giới quyền. [Quyền của Skill Claude](https://code.claude.com/docs/en/skills#pre-approve-tools-for-a-skill), [nội dung động](https://code.claude.com/docs/en/skills#inject-dynamic-context).
 
 Hai ví dụ đề xuất để kiểm chứng giá trị: Skill “QA phần vừa đổi” giúp chọn đúng kiểm tra và bàn giao ngắn; MCP đọc tài liệu/issue giúp agent có dữ liệu ngoài repo. Cần techlead chọn một ví dụ cụ thể cho mỗi loại; chưa mặc định kết nối dịch vụ hoặc quyền ghi.
 

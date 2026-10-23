@@ -1,3 +1,7 @@
+i18n.setLang(api.language()) // before anything draws: index.html's static text is translated here, the rest at render time
+document.documentElement.lang = i18n.lang()
+i18n.translateDom(document.body)
+const tr = i18n.t
 const $ = s => document.querySelector(s)
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e }
 const base = p => p.split(/[\\/]/).pop() // Windows paths use backslashes
@@ -5,6 +9,7 @@ const MAC = navigator.userAgent.includes('Mac'), MOD = MAC ? '⌘' : 'Ctrl+'
 document.body.classList.toggle('mac', MAC) // main hides the title bar on macOS only
 const tilde = p => p.replace(/^(?:\/Users|\/home)\/[^/]+(?=\/|$)/, '~') // header only; the full path is in the sidebar tooltip
 
+const N_ = s => s // marks a key that tr() translates later, where it is shown
 const AVATAR_PALETTE = [
   '#ff8fab',
   '#7cb4ff',
@@ -16,14 +21,14 @@ const AVATAR_PALETTE = [
   '#ff6b6b'
 ]
 const PALETTE_NAMES = {
-  '#ff8fab': 'Hồng',
-  '#7cb4ff': 'Xanh dương',
-  '#5fe0b0': 'Xanh lá',
-  '#ffa94d': 'Cam',
-  '#bb9bff': 'Tím',
-  '#ffd23f': 'Vàng',
-  '#66d9e8': 'Xanh ngọc',
-  '#ff6b6b': 'Đỏ'
+  '#ff8fab': N_('Hồng'),
+  '#7cb4ff': N_('Xanh dương'),
+  '#5fe0b0': N_('Xanh lá'),
+  '#ffa94d': N_('Cam'),
+  '#bb9bff': N_('Tím'),
+  '#ffd23f': N_('Vàng'),
+  '#66d9e8': N_('Xanh ngọc'),
+  '#ff6b6b': N_('Đỏ')
 }
 
 function getDefaultAvatar(teamList = [], memberIndex = 0) {
@@ -108,7 +113,7 @@ function updateAllAgentAvatars() {
 }
 
 function validateAllowedCommands(commands) {
-  if (!Array.isArray(commands)) return { valid: false, message: 'Danh sách lệnh phải là mảng' }
+  if (!Array.isArray(commands)) return { valid: false, message: tr('Danh sách lệnh phải là mảng') }
   const tokenRegex = /^[A-Za-z0-9_./:@=+,%-]+$/
   const normalized = []
   const seen = new Set()
@@ -117,20 +122,20 @@ function validateAllowedCommands(commands) {
     const trimmed = (raw || '').trim()
     if (!trimmed) continue
     if (trimmed.length > 256) {
-      return { valid: false, message: `Lệnh vượt quá 256 ký tự: "${trimmed.slice(0, 30)}…"` }
+      return { valid: false, message: tr('Lệnh vượt quá 256 ký tự: "{cmd}…"', { cmd: trimmed.slice(0, 30) }) }
     }
     const tokens = trimmed.split(/\s+/).filter(Boolean)
     if (tokens.length === 0) continue
     const exe = tokens[0]
     if (exe.startsWith('-')) {
-      return { valid: false, message: `Tên lệnh không được bắt đầu bằng dấu gạch ngang: "${exe}"` }
+      return { valid: false, message: tr('Tên lệnh không được bắt đầu bằng dấu gạch ngang: "{cmd}"', { cmd: exe }) }
     }
     if (exe.includes('=')) {
-      return { valid: false, message: `Tên lệnh không được chứa dấu bằng: "${exe}"` }
+      return { valid: false, message: tr('Tên lệnh không được chứa dấu bằng: "{cmd}"', { cmd: exe }) }
     }
     for (const tok of tokens) {
       if (!tokenRegex.test(tok)) {
-        return { valid: false, message: `Lệnh chứa ký tự không hợp lệ hoặc cú pháp shell: "${tok}"` }
+        return { valid: false, message: tr('Lệnh chứa ký tự không hợp lệ hoặc cú pháp shell: "{token}"', { token: tok }) }
       }
     }
     const norm = tokens.join(' ')
@@ -141,7 +146,7 @@ function validateAllowedCommands(commands) {
   }
 
   if (normalized.length > 20) {
-    return { valid: false, message: 'Tối đa 20 lệnh được phép chạy' }
+    return { valid: false, message: tr('Tối đa 20 lệnh được phép chạy') }
   }
 
   return { valid: true, commands: normalized }
@@ -156,30 +161,30 @@ function validateAllowTools(tools) {
     const t = (raw || '').trim()
     if (!t) continue
     if (t.length > 512) {
-      return { valid: false, message: `Quy tắc công cụ vượt quá 512 ký tự: "${t.slice(0, 30)}…"` }
+      return { valid: false, message: tr('Quy tắc công cụ vượt quá 512 ký tự: "{rule}…"', { rule: t.slice(0, 30) }) }
     }
     if (/[\x00-\x1f\x7f]/.test(t)) {
-      return { valid: false, message: `Quy tắc chứa ký tự điều khiển: "${t}"` }
+      return { valid: false, message: tr('Quy tắc chứa ký tự điều khiển: "{rule}"', { rule: t }) }
     }
     const parenIdx = t.indexOf('(')
     let toolName = t
     if (parenIdx !== -1) {
       if (!t.endsWith(')')) {
-        return { valid: false, message: `Quy tắc công cụ ngoặc không cân bằng: "${t}"` }
+        return { valid: false, message: tr('Quy tắc công cụ ngoặc không cân bằng: "{rule}"', { rule: t }) }
       }
       toolName = t.slice(0, parenIdx)
       const inner = t.slice(parenIdx + 1, -1)
       if (inner.includes('(') || inner.includes(')')) {
-        return { valid: false, message: `Quy tắc công cụ chứa ngoặc lồng nhau: "${t}"` }
+        return { valid: false, message: tr('Quy tắc công cụ chứa ngoặc lồng nhau: "{rule}"', { rule: t }) }
       }
     }
     if (!/^[A-Za-z0-9_-]+$/.test(toolName) && !toolName.startsWith('mcp__')) {
-      return { valid: false, message: `Tên công cụ không hợp lệ: "${toolName}"` }
+      return { valid: false, message: tr('Tên công cụ không hợp lệ: "{tool}"', { tool: toolName }) }
     }
     if (toolName.startsWith('mcp__')) {
       const parts = toolName.split('__')
       if (parts.length < 3 || !parts[1] || !parts[2] || parts[1] === '*' || parts[1].includes('*')) {
-        return { valid: false, message: `Quy tắc MCP phải có tên server cụ thể (mcp__server__tool): "${toolName}"` }
+        return { valid: false, message: tr('Quy tắc MCP phải có tên server cụ thể (mcp__server__tool): "{tool}"', { tool: toolName }) }
       }
     }
     if (!seen.has(t)) {
@@ -189,13 +194,13 @@ function validateAllowTools(tools) {
   }
 
   if (normalized.length > 32) {
-    return { valid: false, message: 'Tối đa 32 quy tắc công cụ' }
+    return { valid: false, message: tr('Tối đa 32 quy tắc công cụ') }
   }
 
   return { valid: true, tools: normalized }
 }
 
-const hhmm = iso => new Date(iso).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+const hhmm = iso => new Date(iso).toLocaleTimeString(i18n.locale(), { hour: '2-digit', minute: '2-digit' })
 // the app's icon set: 24×24 strokes in currentColor, drawn like the header's; "lead" = an icon followed by text
 const ICONS = {
   sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
@@ -297,11 +302,11 @@ function setSpaceBadge(button, n) {
   if (!n) return badge?.remove()
   if (!badge) button.append(badge = el('span', 'space-badge'))
   badge.textContent = n
-  badge.title = `${n} việc cần bạn`
+  badge.title = tr('{n} việc cần bạn', { n })
 }
 function setSpaceRunning(button, n) {
   button.classList.toggle('running', n > 0)
-  if (n) button.title += ` · ${n} agent đang chạy`
+  if (n) button.title += ' · ' + tr('{n} agent đang chạy', { n })
 }
 // a turn started or ended in some box: its dot changes (a PM fan-out starts several at once)
 let projectsTimer = null
@@ -316,7 +321,7 @@ function syncActive(list) {
     activeRuns.set(runKey(dir, r.name), {
       name: r.name,
       runId: r.runId,
-      label: r.label || 'đang khởi động…',
+      label: r.label || tr('đang khởi động…'),
       stopping: !!r.stopping,
       phase: r.phase || 'running',
       blockedBy: r.blockedBy || [],
@@ -331,6 +336,24 @@ function syncActive(list) {
 
 // the composer's text per box, so a half-typed message never follows you into another space (memory only)
 const drafts = new Map()
+// Settings › Language: main keeps the choice (menus, dialogs, system messages); the page reloads to redraw in it, keeping the draft
+const LANG_DRAFT = 'agentChatLanguageDraft'
+try {
+  const saved = JSON.parse(sessionStorage.getItem(LANG_DRAFT) || 'null')
+  sessionStorage.removeItem(LANG_DRAFT)
+  if (saved?.key && typeof saved.text === 'string') drafts.set(saved.key, { text: saved.text, images: Array.isArray(saved.images) ? saved.images : [] })
+} catch {}
+$('#ui-language').replaceChildren(...i18n.LANGS.map(l => new Option(i18n.NAMES[l], l)))
+$('#ui-language').value = i18n.lang()
+$('#ui-language').onchange = async e => { // main saves it and reloads the page
+  try {
+    if (dir && !$('#input').disabled) sessionStorage.setItem(LANG_DRAFT, JSON.stringify({ key: dir + '\0' + box, text: $('#input').value, images: composerImages }))
+  } catch {}
+  try { await api.setLanguage(e.target.value) } catch (err) {
+    try { sessionStorage.removeItem(LANG_DRAFT) } catch {}
+    e.target.value = i18n.lang(); showToast(err.message)
+  }
+}
 async function openProject(d, c = d === dir ? box : null) {
   // the input is disabled while a box opens: its text then isn't that box's draft
   if (dir && !$('#input').disabled) drafts.set(dir + '\0' + box, { text: $('#input').value, images: composerImages })
@@ -415,14 +438,14 @@ async function openProject(d, c = d === dir ? box : null) {
   syncActive(res.active)
   renderOrphanLocks()
 
-  $('#log-error-banner').replaceChildren(...history.error ? [icon('warn', 'lead'), `Lỗi định dạng log: ${history.error.message || history.error.code}`] : [])
+  $('#log-error-banner').replaceChildren(...history.error ? [icon('warn', 'lead'), tr('Lỗi định dạng log: {error}', { error: history.error.message || history.error.code })] : [])
   $('#log-error-banner').hidden = !history.error
 
   for (const ev of pendingEvents) {
     if (ev.type === 'status') {
       const key = runKey(d, ev.name)
       if (ev.on) {
-        activeRuns.set(key, { name: ev.name, runId: ev.runId, label: 'đang khởi động…', stopping: false, phase: 'running', blockedBy: [], startedAt: Date.now(), activeAt: Date.now(), detail: null, detailTruncated: false })
+        activeRuns.set(key, { name: ev.name, runId: ev.runId, label: tr('đang khởi động…'), stopping: false, phase: 'running', blockedBy: [], startedAt: Date.now(), activeAt: Date.now(), detail: null, detailTruncated: false })
       } else {
         const cur = activeRuns.get(key)
         if (cur && (!ev.runId || cur.runId === ev.runId)) activeRuns.delete(key)
@@ -436,7 +459,6 @@ async function openProject(d, c = d === dir ? box : null) {
         if (ev.data.blockedBy) cur.blockedBy = ev.data.blockedBy
         if (ev.data.stopping !== undefined) cur.stopping = !!ev.data.stopping
         if (ev.data.chain !== undefined) cur.chain = ev.data.chain
-        if (ev.data.label === 'đang dừng…') cur.stopping = true
         if (ev.data.startedAt) Object.assign(cur, { startedAt: ev.data.startedAt, activeAt: ev.data.activeAt })
         cur.detail = ev.data.detail !== undefined ? ev.data.detail : null
         cur.detailTruncated = !!ev.data.detailTruncated
@@ -491,7 +513,7 @@ let draft = [], sess = {}, accounts = [], modelsOf = {}, sessionsOf = {}
 // revisions the open dialog's draft was read at; saving sends these so main refuses to overwrite a newer team/settings
 let draftTeamRevision = null, draftSettingsRevision = null
 let currentSettingTab = 'general'
-const when = iso => new Date(iso).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+const when = iso => new Date(iso).toLocaleString(i18n.locale(), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 
 const sessionCacheKey = (d, agentName, cli, wsId) => `${d || ''}\0${agentName || ''}\0${cli || ''}\0${wsId || ''}`
 
@@ -596,12 +618,12 @@ function renderEditors() {
 
     const navAv = paintAvatar(el('span', 'settings-nav-av'), a.name, a.avatar.color)
 
-    const navLabel = el('span', 'settings-nav-label', a.name ? `@${a.name}` : '(chưa có tên)')
+    const navLabel = el('span', 'settings-nav-label', a.name ? `@${a.name}` : tr('(chưa có tên)'))
     btn.append(navAv, navLabel)
 
     if (a.scopeNeedsReview) {
       const warn = icon('warn', 'settings-nav-warn')
-      warn.title = 'Phạm vi cũ cần xác nhận'
+      warn.title = tr('Phạm vi cũ cần xác nhận')
       btn.append(warn)
     }
 
@@ -633,14 +655,14 @@ function renderEditors() {
     const chk = el('label', 'chk')
     const cb = el('input'); cb.type = 'checkbox'; cb.checked = a.resume !== false
     cb.onchange = () => { a.resume = cb.checked; renderEditors() }
-    chk.append(cb, 'Nhớ phiên')
+    chk.append(cb, tr('Nhớ phiên'))
 
     const roLabel = el('label', 'chk')
     const roCb = el('input'); roCb.type = 'checkbox'; roCb.checked = !!a.readOnly
     roCb.onchange = () => { a.readOnly = roCb.checked; renderEditors() }
-    roLabel.append(roCb, 'Chỉ đọc')
+    roLabel.append(roCb, tr('Chỉ đọc'))
 
-    const del = el('button', 'box press btn sm danger', 'Xoá')
+    const del = el('button', 'box press btn sm danger', tr('Xoá'))
     del.onclick = () => {
       draft.splice(i, 1)
       if (currentSettingTab === 'agent:' + i) {
@@ -661,9 +683,9 @@ function renderEditors() {
     }
     const nameInp = field('input', a.name, v => {
       a.name = v.trim()
-      navList.children[i].querySelector('.settings-nav-label').textContent = a.name ? `@${a.name}` : '(chưa có tên)'
+      navList.children[i].querySelector('.settings-nav-label').textContent = a.name ? `@${a.name}` : tr('(chưa có tên)')
       repaint()
-    }, { className: 'f name', placeholder: 'tên (vd: dev-fe)' })
+    }, { className: 'f name', placeholder: tr('tên (vd: dev-fe)') })
     top.append(topAv, nameInp, cli, chk, roLabel, del)
 
     // identity color: shows on the avatar and the agent's status icons
@@ -673,8 +695,8 @@ function renderEditors() {
       const sw = el('button', 'avatar-swatch' + (a.avatar.color === c ? ' selected' : ''))
       sw.type = 'button'
       sw.style.background = c
-      sw.title = `${PALETTE_NAMES[c] || c}: ${c}`
-      sw.setAttribute('aria-label', `Chọn màu ${PALETTE_NAMES[c] || c}`)
+      sw.title = `${PALETTE_NAMES[c] ? tr(PALETTE_NAMES[c]) : c}: ${c}`
+      sw.setAttribute('aria-label', tr('Chọn màu {color}', { color: PALETTE_NAMES[c] ? tr(PALETTE_NAMES[c]) : c }))
       sw.setAttribute('aria-pressed', a.avatar.color === c ? 'true' : 'false')
       sw.onclick = () => {
         a.avatar.color = c
@@ -686,17 +708,17 @@ function renderEditors() {
       }
       palDiv.append(sw)
     })
-    avRow.append(el('span', 'avatar-label', 'Màu nhận diện'), palDiv)
+    avRow.append(el('span', 'avatar-label', tr('Màu nhận diện')), palDiv)
 
-    const role = el('label', '', 'Vai trò')
-    role.append(field('textarea', a.role, v => a.role = v, { className: 'f', placeholder: 'vd: Dev front-end: làm UI theo thiết kế của techlead' }))
+    const role = el('label', '', tr('Vai trò'))
+    role.append(field('textarea', a.role, v => a.role = v, { className: 'f', placeholder: tr('vd: Dev front-end: làm UI theo thiết kế của techlead') }))
 
     const ownsLines = Array.isArray(a.owns) ? a.owns.join('\n') : (typeof a.owns === 'string' ? a.owns : '')
-    const ownsLab = el('label', '', 'Phạm vi phụ trách (mỗi dòng một path/glob)')
+    const ownsLab = el('label', '', tr('Phạm vi phụ trách (mỗi dòng một path/glob)'))
     const ownsArea = field('textarea', ownsLines, v => {
       a.owns = v.split('\n').map(s => s.trim()).filter(Boolean)
-    }, { className: 'f', rows: 3, placeholder: 'vd:\nindex.html\nreports/**\n(để trống: toàn dự án)' })
-    const ownsNote = el('small', '', 'Để trống: toàn dự án. Chỉ đọc: cảnh báo nếu có ghi.')
+    }, { className: 'f', rows: 3, placeholder: tr('vd:\nindex.html\nreports/**\n(để trống: toàn dự án)') })
+    const ownsNote = el('small', '', tr('Để trống: toàn dự án. Chỉ đọc: cảnh báo nếu có ghi.'))
     ownsNote.style.color = 'var(--muted)'
     ownsLab.append(ownsArea, ownsNote)
 
@@ -708,15 +730,15 @@ function renderEditors() {
     const permGroup = el('div', 'agent-perm-group')
 
     const permHdr = el('div', 'settings-perm-hdr')
-    permHdr.textContent = 'Quyền công cụ của CLI'
+    permHdr.textContent = tr('Quyền công cụ của CLI')
     permGroup.append(permHdr)
 
     const modeOptions = [
-      ['edit', 'Mặc định (sửa file + lệnh đã cho phép)'],
-      ['custom', isAgy ? 'Tuỳ chỉnh (agy không hỗ trợ)' : 'Tuỳ chỉnh'],
-      ['full', 'Toàn quyền']
+      ['edit', tr('Mặc định (sửa file + lệnh đã cho phép)')],
+      ['custom', isAgy ? tr('Tuỳ chỉnh (agy không hỗ trợ)') : tr('Tuỳ chỉnh')],
+      ['full', tr('Toàn quyền')]
     ]
-    const modeLab = el('label', 'grow', 'Mức quyền')
+    const modeLab = el('label', 'grow', tr('Mức quyền'))
     const modeSel = select(modeOptions, a.permissions.mode, v => {
       if (isAgy && v === 'custom') {
         a.permissions.mode = 'edit'
@@ -730,15 +752,15 @@ function renderEditors() {
     permGroup.append(modeLab)
 
     if (a.permissions.mode === 'full') {
-      const fullWarn = warnBanner('Cảnh báo Toàn quyền: Agent có thể chạy lệnh, dùng mạng và tác động tới file ngoài dự án theo quyền tài khoản máy. Phạm vi file của app không phải sandbox bảo vệ hệ điều hành.')
+      const fullWarn = warnBanner(tr('Cảnh báo Toàn quyền: Agent có thể chạy lệnh, dùng mạng và tác động tới file ngoài dự án theo quyền tài khoản máy. Phạm vi file của app không phải sandbox bảo vệ hệ điều hành.'))
       permGroup.append(fullWarn)
 
       if (isCodex) {
-        const codexFullNote = el('small', '', 'Codex Toàn quyền: Mạng không bị giới hạn bởi workspace sandbox (-c sandbox_mode="danger-full-access").')
+        const codexFullNote = el('small', '', tr('Codex Toàn quyền: Mạng không bị giới hạn bởi workspace sandbox (-c sandbox_mode="danger-full-access").'))
         codexFullNote.style.color = 'var(--muted)'
         permGroup.append(codexFullNote)
       } else if (isAgy) {
-        const agyFullNote = el('small', '', 'agy Toàn quyền: Bỏ hỏi quyền (--dangerously-skip-permissions).')
+        const agyFullNote = el('small', '', tr('agy Toàn quyền: Bỏ hỏi quyền (--dangerously-skip-permissions).'))
         agyFullNote.style.color = 'var(--muted)'
         permGroup.append(agyFullNote)
       }
@@ -747,15 +769,15 @@ function renderEditors() {
     if (a.permissions.mode === 'custom') {
       if (isClaude) {
         const toolsLines = Array.isArray(a.permissions.allowTools) ? a.permissions.allowTools.join('\n') : ''
-        const toolsLab = el('label', '', 'Quy tắc công cụ bổ sung (--allowedTools, mỗi dòng một quy tắc)')
+        const toolsLab = el('label', '', tr('Quy tắc công cụ bổ sung (--allowedTools, mỗi dòng một quy tắc)'))
         const toolsArea = field('textarea', toolsLines, v => {
           a.permissions.allowTools = v.split('\n').map(s => s.trim()).filter(Boolean)
         }, {
           className: 'f',
           rows: 3,
-          placeholder: 'vd:\nBash(npm test:*)\nBash(git status)\nWebFetch\nmcp__github__get_issue'
+          placeholder: tr('vd:') + '\nBash(npm test:*)\nBash(git status)\nWebFetch\nmcp__github__get_issue'
         })
-        const toolsNote = el('small', '', 'Quy tắc này bổ sung cho cấu hình CLI sẵn có. Mỗi dòng một rule: Tool hoặc Tool(pattern), MCP dạng mcp__server__tool. Tối đa 32 quy tắc.')
+        const toolsNote = el('small', '', tr('Quy tắc này bổ sung cho cấu hình CLI sẵn có. Mỗi dòng một rule: Tool hoặc Tool(pattern), MCP dạng mcp__server__tool. Tối đa 32 quy tắc.'))
         toolsNote.style.color = 'var(--muted)'
         toolsLab.append(toolsArea, toolsNote)
         permGroup.append(toolsLab)
@@ -763,8 +785,8 @@ function renderEditors() {
         // Read-only preview of Bash commands from allowedCommands
         const normCmds = Array.isArray(a.allowedCommands) ? a.allowedCommands : []
         const bashRules = normCmds.map(c => `Bash(${c})`).join('\n')
-        const bashPreviewLab = el('label', '', 'Quyền Bash tự sinh từ lệnh được phép (chỉ đọc)')
-        const bashPreviewArea = field('textarea', bashRules || '(không có lệnh nào)', () => {}, {
+        const bashPreviewLab = el('label', '', tr('Quyền Bash tự sinh từ lệnh được phép (chỉ đọc)'))
+        const bashPreviewArea = field('textarea', bashRules || tr('(không có lệnh nào)'), () => {}, {
           className: 'f',
           rows: Math.min(3, Math.max(1, normCmds.length)),
           disabled: true
@@ -773,7 +795,7 @@ function renderEditors() {
         bashPreviewArea.style.background = 'var(--bg)'
         bashPreviewArea.style.fontFamily = 'ui-monospace, monospace'
         bashPreviewArea.style.fontSize = '11px'
-        const bashPreviewNote = el('small', '', 'Tự động cấp vào --allowedTools khi Claude chạy ở mức Mặc định hoặc Tuỳ chỉnh.')
+        const bashPreviewNote = el('small', '', tr('Tự động cấp vào --allowedTools khi Claude chạy ở mức Mặc định hoặc Tuỳ chỉnh.'))
         bashPreviewNote.style.color = 'var(--muted)'
         bashPreviewLab.append(bashPreviewArea, bashPreviewNote)
         permGroup.append(bashPreviewLab)
@@ -781,12 +803,12 @@ function renderEditors() {
         const netLab = el('label', 'chk')
         const netCb = el('input'); netCb.type = 'checkbox'; netCb.checked = !!a.permissions.networkAccess
         netCb.onchange = () => { a.permissions.networkAccess = netCb.checked; renderEditors() }
-        netLab.append(netCb, 'Cho lệnh trong sandbox truy cập mạng')
-        const netNote = el('small', '', 'Codex tự chạy lệnh trong sandbox; danh sách bên dưới chỉ áp dụng khi app chạy hộ.')
+        netLab.append(netCb, tr('Cho lệnh trong sandbox truy cập mạng'))
+        const netNote = el('small', '', tr('Codex tự chạy lệnh trong sandbox; danh sách bên dưới chỉ áp dụng khi app chạy hộ.'))
         netNote.style.color = 'var(--muted)'
         permGroup.append(netLab, netNote)
       } else if (isAgy) {
-        const agyNote = el('small', '', 'agy không hỗ trợ danh sách công cụ tuỳ chỉnh.')
+        const agyNote = el('small', '', tr('agy không hỗ trợ danh sách công cụ tuỳ chỉnh.'))
         agyNote.style.color = 'var(--muted)'
         permGroup.append(agyNote)
       }
@@ -794,54 +816,54 @@ function renderEditors() {
 
     // allowedCommands (inside permGroup)
     const cmdLines = Array.isArray(a.allowedCommands) ? a.allowedCommands.join('\n') : ''
-    const cmdLab = el('label', '', 'Lệnh được tự chạy (mỗi dòng một lệnh)')
+    const cmdLab = el('label', '', tr('Lệnh được tự chạy (mỗi dòng một lệnh)'))
     const cmdArea = field('textarea', cmdLines, v => {
       a.allowedCommands = v.split('\n').map(s => s.trim()).filter(Boolean)
       if (isClaude && a.permissions.mode === 'custom') {
         renderEditors()
       }
-    }, { className: 'f', rows: 2, placeholder: 'vd:\nnpm run check\nnode check.js\n(để trống: tắt chạy lệnh)' })
-    const cmdNote = el('small', '', 'Để trống: tắt lệnh do app chạy hộ. Claude cũng không được app cấp thêm quyền Bash từ danh sách này. Quyền CLI sẵn có và Toàn quyền vẫn áp dụng.')
+    }, { className: 'f', rows: 2, placeholder: tr('vd:\nnpm run check\nnode check.js\n(để trống: tắt chạy lệnh)') })
+    const cmdNote = el('small', '', tr('Để trống: tắt lệnh do app chạy hộ. Claude cũng không được app cấp thêm quyền Bash từ danh sách này. Quyền CLI sẵn có và Toàn quyền vẫn áp dụng.'))
     cmdNote.style.color = 'var(--muted)'
     cmdLab.append(cmdArea, cmdNote)
     permGroup.append(cmdLab)
 
     if (a.permissionConfigError) {
-      const permErr = warnBanner(`Lỗi cấu hình quyền: ${a.permissionConfigError}`)
+      const permErr = warnBanner(tr('Lỗi cấu hình quyền: {error}', { error: a.permissionConfigError }))
       permGroup.append(permErr)
     }
     if (a.commandConfigError) {
-      const cmdErr = warnBanner(`Lỗi cấu hình lệnh: ${a.commandConfigError}`)
+      const cmdErr = warnBanner(tr('Lỗi cấu hình lệnh: {error}', { error: a.commandConfigError }))
       permGroup.append(cmdErr)
     }
 
     let sessErr = null
     if (a.sessionConfigError) {
-      sessErr = warnBanner(`Lỗi cấu hình xoay phiên: ${a.sessionConfigError}`)
+      sessErr = warnBanner(tr('Lỗi cấu hình xoay phiên: {error}', { error: a.sessionConfigError }))
     }
 
     const m = modelsOf[a.cli], models = m?.models || []
     const efforts = models.find(x => x.id === a.model)?.efforts || m?.efforts || models[0]?.efforts || []
     const tune = el('div', 'atop')
-    const ml = el('label', 'grow', 'Model')
-    ml.append(select([['', m ? 'Mặc định của CLI' : 'Đang tải…'], ...models.map(x => [x.id, x.label || x.id])], a.model || '', v => { a.model = v; renderEditors() }))
-    const ef = el('label', '', 'Effort')
-    ef.append(select([['', 'Mặc định'], ...efforts.map(e => [e, e])], a.effort || '', v => a.effort = v))
+    const ml = el('label', 'grow', tr('Model'))
+    ml.append(select([['', m ? tr('Mặc định của CLI') : tr('Đang tải…')], ...models.map(x => [x.id, x.label || x.id])], a.model || '', v => { a.model = v; renderEditors() }))
+    const ef = el('label', '', tr('Effort'))
+    ef.append(select([['', tr('Mặc định')], ...efforts.map(e => [e, e])], a.effort || '', v => a.effort = v))
     tune.append(ml, ef)
 
     const limitsRow = el('div', 'atop')
-    const to = el('label', '', 'Giới hạn mỗi lượt (phút)')
+    const to = el('label', '', tr('Giới hạn mỗi lượt (phút)'))
     const toVal = a.timeoutMinutes != null ? a.timeoutMinutes : 30
     const toInp = field('input', toVal, v => { a.timeoutMinutes = v }, { type: 'number', min: '1', max: '1440', step: '1', className: 'f', style: 'width: 100px;' })
     to.append(toInp)
 
-    const rotLab = el('label', '', 'Ngưỡng xoay phiên (token ngữ cảnh)')
+    const rotLab = el('label', '', tr('Ngưỡng xoay phiên (token ngữ cảnh)'))
     const rotVal = (a.sessionTokenLimit != null && a.sessionTokenLimit !== '') ? a.sessionTokenLimit : 150000
     const rotInp = field('input', rotVal, v => { a.sessionTokenLimit = v }, {
       type: 'number', min: '0', step: '1', placeholder: '150000', className: 'f', style: 'width: 140px;',
-      title: 'Tự mở phiên mới khi token ngữ cảnh vượt ngưỡng. 0 = tắt.'
+      title: tr('Tự mở phiên mới khi token ngữ cảnh vượt ngưỡng. 0 = tắt.')
     })
-    const rotNote = el('small', '', '0 = tắt. Áp dụng cho lượt kế tiếp khi có số đo ngữ cảnh.')
+    const rotNote = el('small', '', tr('0 = tắt. Áp dụng cho lượt kế tiếp khi có số đo ngữ cảnh.'))
     rotNote.style.color = 'var(--muted)'
     rotLab.append(rotInp, rotNote)
     limitsRow.append(to, rotLab)
@@ -849,8 +871,8 @@ function renderEditors() {
     let reviewCard = null
     if (a.scopeNeedsReview) {
       reviewCard = el('div', 'review-card')
-      const txt = el('span', '', `Phạm vi cũ cần xác nhận: "${a.ownsLegacy || (Array.isArray(a.owns) ? a.owns.join(', ') : a.owns) || '—'}"`)
-      const btn = el('button', 'btn-stop box press', 'Xác nhận phạm vi này')
+      const txt = el('span', '', tr('Phạm vi cũ cần xác nhận: "{scope}"', { scope: a.ownsLegacy || (Array.isArray(a.owns) ? a.owns.join(', ') : a.owns) || '—' }))
+      const btn = el('button', 'btn-stop box press', tr('Xác nhận phạm vi này'))
       btn.type = 'button'
       btn.onclick = () => {
         a.scopeConfirmed = true
@@ -861,13 +883,13 @@ function renderEditors() {
     }
 
     const line = el('div', 'sess')
-    if (a.resume === false) line.append(el('span', '', 'Tắt nhớ phiên: mỗi lượt gửi lại 30 tin gần nhất'))
+    if (a.resume === false) line.append(el('span', '', tr('Tắt nhớ phiên: mỗi lượt gửi lại 30 tin gần nhất')))
     else {
       const cur = (sess[a.name]?.cli === a.cli && sess[a.name]?.id) ? sess[a.name] : null
       const sKey = sessionCacheKey(dir, a.name, a.cli, workspaceId)
       const list = sessionsOf[sKey]
-      const lab = el('label', 'grow', `Phiên ${a.cli} trong dự án này`)
-      lab.append(select([['', list ? 'Phiên mới (tự mở ở lượt tới)' : 'Đang tải…'], ...(list || []).map(s => [s.id, `${when(s.at)} · ${(s.title || s.id).slice(0, 70)}`])],
+      const lab = el('label', 'grow', tr('Phiên {cli} trong dự án này', { cli: a.cli }))
+      lab.append(select([['', list ? tr('Phiên mới (tự mở ở lượt tới)') : tr('Đang tải…')], ...(list || []).map(s => [s.id, `${when(s.at)} · ${(s.title || s.id).slice(0, 70)}`])],
         cur?.id || '', async v => {
           try {
             const targetDir = dir
@@ -879,7 +901,7 @@ function renderEditors() {
           } catch (e) { $('#err').textContent = e.message.replace(/^.*?Error: /, '') }
         }))
       line.append(lab)
-      if (cur) line.append(el('small', '', cur.adopted ? 'Lượt tới gửi kèm bối cảnh nhóm' : `Đã đọc ${cur.seen} tin · ${when(cur.at)}`))
+      if (cur) line.append(el('small', '', cur.adopted ? tr('Lượt tới gửi kèm bối cảnh nhóm') : tr('Đã đọc {n} tin · {when}', { n: cur.seen, when: when(cur.at) })))
     }
     card.append(top, avRow, tune, limitsRow, role, ownsLab, permGroup, ...(sessErr ? [sessErr] : []), ...(reviewCard ? [reviewCard] : []), line)
     return card
@@ -924,11 +946,11 @@ $('#gear').onclick = async () => {
     $('#setting-worktrees').disabled = true
     $('#setting-worktrees').checked = false
     $('#merge-checks-wrap').hidden = true
-    $('#git-status-msg').textContent = 'Dự án chưa phải Git repository. Bấm "Khởi tạo Git" để bắt đầu.'
+    $('#git-status-msg').textContent = tr('Dự án chưa phải Git repository. Bấm "Khởi tạo Git" để bắt đầu.')
   } else {
     $('#btn-init-git').hidden = true
     $('#setting-worktrees').disabled = false
-    $('#git-status-msg').textContent = worktreeState?.targetBranch ? `Nhánh chính: ${worktreeState.targetBranch}` : ''
+    $('#git-status-msg').textContent = worktreeState?.targetBranch ? tr('Nhánh chính: {branch}', { branch: worktreeState.targetBranch }) : ''
     $('#merge-checks-wrap').hidden = !$('#setting-worktrees').checked
   }
 
@@ -956,14 +978,14 @@ async function openGitInitModal() {
   gitInitFiles = []
   $('#git-init-path').textContent = dir
   $('#git-init-branch').textContent = 'main'
-  $('#git-init-files').replaceChildren(el('div', 'none', 'Đang chuẩn bị danh sách file…'))
-  $('#git-init-ignore').textContent = 'Đang tải…'
+  $('#git-init-files').replaceChildren(el('div', 'none', tr('Đang chuẩn bị danh sách file…')))
+  $('#git-init-ignore').textContent = tr('Đang tải…')
   modal.showModal()
 
   try {
     const res = await api.prepareGitInit(dir)
     if (!res || !res.ok) {
-      throw new Error(res?.error?.message || 'Không thể chuẩn bị Git init')
+      throw new Error(res?.error?.message || tr('Không thể chuẩn bị Git init'))
     }
     gitInitToken = res.token
     gitInitFiles = Array.isArray(res.files) ? [...res.files] : []
@@ -973,7 +995,7 @@ async function openGitInitModal() {
     const filesEl = $('#git-init-files')
     filesEl.replaceChildren()
     if (!gitInitFiles || gitInitFiles.length === 0) {
-      filesEl.append(el('div', 'none', 'Không có file nào để commit'))
+      filesEl.append(el('div', 'none', tr('Không có file nào để commit')))
       confirmBtn.disabled = true
     } else {
       gitInitFiles.forEach(f => {
@@ -996,7 +1018,7 @@ $('#git-init-confirm').onclick = async () => {
   const btn = $('#git-init-confirm')
   const errBanner = $('#git-init-error')
   if (!gitInitToken || !Array.isArray(gitInitFiles) || gitInitFiles.length === 0) {
-    errBanner.textContent = 'Danh sách file commit đầu không hợp lệ'
+    errBanner.textContent = tr('Danh sách file commit đầu không hợp lệ')
     errBanner.hidden = false
     return
   }
@@ -1005,14 +1027,14 @@ $('#git-init-confirm').onclick = async () => {
   try {
     const res = await api.initGit(dir, { token: gitInitToken, files: gitInitFiles })
     if (!res || !res.ok) {
-      throw new Error(res?.error?.message || 'Khởi tạo Git thất bại')
+      throw new Error(res?.error?.message || tr('Khởi tạo Git thất bại'))
     }
     $('#git-init-modal').close()
-    showToast('Đã khởi tạo Git thành công!')
+    showToast(tr('Đã khởi tạo Git thành công!'))
     await loadWorktreeState()
     $('#btn-init-git').hidden = true
     $('#setting-worktrees').disabled = false
-    $('#git-status-msg').textContent = 'Đã khởi tạo Git (nhánh main)'
+    $('#git-status-msg').textContent = tr('Đã khởi tạo Git (nhánh main)')
   } catch (e) {
     errBanner.textContent = e.message.replace(/^.*?Error: /, '')
     errBanner.hidden = false
@@ -1059,7 +1081,7 @@ $('#save').onclick = async () => {
     const a = draft[idx]
     const val = a.timeoutMinutes == null || a.timeoutMinutes === '' ? 30 : Number(a.timeoutMinutes)
     if (!Number.isInteger(val) || val < 1 || val > 1440) {
-      $('#err').textContent = `Giới hạn mỗi lượt của @${a.name || 'agent'} phải là số nguyên từ 1 đến 1440 phút`
+      $('#err').textContent = tr('Giới hạn mỗi lượt của @{name} phải là số nguyên từ 1 đến 1440 phút', { name: a.name || 'agent' })
       currentSettingTab = 'agent:' + idx
       updateSettingsViews()
       return
@@ -1072,7 +1094,7 @@ $('#save').onclick = async () => {
       tokenLim = typeof rawLim === 'number' ? rawLim : Number(rawLim)
     }
     if (!Number.isSafeInteger(tokenLim) || tokenLim < 0) {
-      $('#err').textContent = `Ngưỡng xoay phiên của @${a.name || 'agent'} phải là số nguyên không âm (>= 0)`
+      $('#err').textContent = tr('Ngưỡng xoay phiên của @{name} phải là số nguyên không âm (>= 0)', { name: a.name || 'agent' })
       currentSettingTab = 'agent:' + idx
       updateSettingsViews()
       return
@@ -1081,7 +1103,7 @@ $('#save').onclick = async () => {
     delete a.sessionConfigError
 
     if (!a.avatar || !['male', 'female'].includes(a.avatar.gender) || !AVATAR_PALETTE.includes(a.avatar.color)) {
-      $('#err').textContent = `Avatar của @${a.name || 'agent'} không hợp lệ`
+      $('#err').textContent = tr('Avatar của @{name} không hợp lệ', { name: a.name || 'agent' })
       currentSettingTab = 'agent:' + idx
       updateSettingsViews()
       return
@@ -1089,7 +1111,7 @@ $('#save').onclick = async () => {
 
     const cmdRes = validateAllowedCommands(a.allowedCommands || [])
     if (!cmdRes.valid) {
-      $('#err').textContent = `Lỗi cấu hình lệnh của @${a.name || 'agent'}: ${cmdRes.message}`
+      $('#err').textContent = tr('Lỗi cấu hình lệnh của @{name}: {error}', { name: a.name || 'agent', error: cmdRes.message })
       currentSettingTab = 'agent:' + idx
       updateSettingsViews()
       return
@@ -1098,7 +1120,7 @@ $('#save').onclick = async () => {
     delete a.commandConfigError
 
     if (a.cli.startsWith('agy') && a.permissions.mode === 'custom') {
-      $('#err').textContent = `agy không hỗ trợ chế độ Tuỳ chỉnh cho @${a.name || 'agent'}`
+      $('#err').textContent = tr('agy không hỗ trợ chế độ Tuỳ chỉnh cho @{name}', { name: a.name || 'agent' })
       currentSettingTab = 'agent:' + idx
       updateSettingsViews()
       return
@@ -1107,7 +1129,7 @@ $('#save').onclick = async () => {
       if (a.cli.startsWith('claude')) {
         const toolRes = validateAllowTools(a.permissions.allowTools || [])
         if (!toolRes.valid) {
-          $('#err').textContent = `Lỗi quy tắc công cụ của @${a.name || 'agent'}: ${toolRes.message}`
+          $('#err').textContent = tr('Lỗi quy tắc công cụ của @{name}: {error}', { name: a.name || 'agent', error: toolRes.message })
           currentSettingTab = 'agent:' + idx
           updateSettingsViews()
           return
@@ -1138,14 +1160,14 @@ $('#save').onclick = async () => {
 
   if (worktreesEnabled) {
     if (mergeChecksRaw.length === 0) {
-      $('#err').textContent = 'Phải có ít nhất 1 lệnh kiểm tra khi bật worktree'
+      $('#err').textContent = tr('Phải có ít nhất 1 lệnh kiểm tra khi bật worktree')
       currentSettingTab = 'worktree'
       updateSettingsViews()
       return
     }
     const chkRes = validateAllowedCommands(mergeChecksRaw)
     if (!chkRes.valid) {
-      $('#err').textContent = `Lỗi lệnh kiểm tra: ${chkRes.message}`
+      $('#err').textContent = tr('Lỗi lệnh kiểm tra: {error}', { error: chkRes.message })
       currentSettingTab = 'worktree'
       updateSettingsViews()
       return
@@ -1154,7 +1176,7 @@ $('#save').onclick = async () => {
   } else if (mergeChecksRaw.length > 0) {
     const chkRes = validateAllowedCommands(mergeChecksRaw)
     if (!chkRes.valid) {
-      $('#err').textContent = `Lỗi lệnh kiểm tra: ${chkRes.message}`
+      $('#err').textContent = tr('Lỗi lệnh kiểm tra: {error}', { error: chkRes.message })
       currentSettingTab = 'worktree'
       updateSettingsViews()
       return
@@ -1165,7 +1187,7 @@ $('#save').onclick = async () => {
   const rawChainLimit = $('#setting-chain-limit').value.trim()
   const chainLimit = rawChainLimit === '' ? 12 : Number(rawChainLimit)
   if (!Number.isInteger(chainLimit) || chainLimit < 1 || chainLimit > 50) {
-    $('#err').textContent = 'Giới hạn chuỗi agent phải là số nguyên từ 1 đến 50 lượt'
+    $('#err').textContent = tr('Giới hạn chuỗi agent phải là số nguyên từ 1 đến 50 lượt')
     currentSettingTab = 'limits'
     updateSettingsViews()
     return
@@ -1176,7 +1198,7 @@ $('#save').onclick = async () => {
   if (rawCostCeiling !== '') {
     const parsedCost = Number(rawCostCeiling)
     if (isNaN(parsedCost) || parsedCost < 0) {
-      $('#err').textContent = 'Trần chi phí mỗi chuỗi phải là số dương hoặc để trống'
+      $('#err').textContent = tr('Trần chi phí mỗi chuỗi phải là số dương hoặc để trống')
       currentSettingTab = 'limits'
       updateSettingsViews()
       return
@@ -1256,7 +1278,7 @@ function updateGrantButtonsState() {
     const agent = btn.dataset.agent
     const isBusy = !!activeRuns.get(runKey(dir, agent))
     const pReq = permissionRequests.find(r => r.id === reqId)
-    if (btn.textContent === 'Đã cấp quyền' || btn.textContent === 'Đã lưu quyền' || btn.textContent === 'Đang cấp quyền…') {
+    if (btn.textContent === tr('Đã cấp quyền') || btn.textContent === tr('Đã lưu quyền') || btn.textContent === tr('Đang cấp quyền…')) {
       btn.disabled = true
     } else {
       btn.disabled = isBusy || !pReq
@@ -1340,7 +1362,7 @@ function linkifyFiles(root, context = {}) {
 function loadImages(container, context = {}) {
   const d = context.dir || dir, log = $('#log')
   for (const img of container.querySelectorAll('img[data-src]')) {
-    const href = img.dataset.src, alt = img.alt || 'ảnh'
+    const href = img.dataset.src, alt = img.alt || tr('ảnh')
     if (/^https?:\/\//i.test(href)) { // never fetched: a remote image would tell its server who reads the chat
       const a = el('a', '', `[${alt}]`)
       a.setAttribute('href', href)
@@ -1349,7 +1371,7 @@ function loadImages(container, context = {}) {
     }
     img.title = alt
     api.readImage(d, href, context.fromFile || null, context.workspace?.id || null).then(res => {
-      if (!res?.ok) throw new Error(res?.message || 'không mở được')
+      if (!res?.ok) throw new Error(res?.message || tr('không mở được'))
       const url = URL.createObjectURL(new Blob([res.bytes], { type: res.mime })), before = img.offsetHeight
       img.onerror = () => URL.revokeObjectURL(url)
       img.onload = () => {
@@ -1393,37 +1415,37 @@ function renderMarkdown(text, context = {}) {
 }
 
 // 706295 → "706k", 3200 → "3,2k", 135100000 → "135,1M"; exact values stay in the tooltip
-const short = n => n < 1e3 ? String(n) : n < 1e6 ? (n / 1e3).toLocaleString('vi-VN', { maximumFractionDigits: n < 1e4 ? 1 : 0 }) + 'k'
-  : (n / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + 'M'
-const usd = n => n.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: n && n < 0.01 ? 4 : 2 })
-const CLI_COUNT_NOTE = 'Theo bộ đếm của CLI; cách tính cache có thể khác nhau'
+const short = n => n < 1e3 ? String(n) : n < 1e6 ? (n / 1e3).toLocaleString(i18n.locale(), { maximumFractionDigits: n < 1e4 ? 1 : 0 }) + 'k'
+  : (n / 1e6).toLocaleString(i18n.locale(), { maximumFractionDigits: 1 }) + 'M'
+const usd = n => n.toLocaleString(i18n.locale(), { minimumFractionDigits: 2, maximumFractionDigits: n && n < 0.01 ? 4 : 2 })
+const CLI_COUNT_NOTE = tr('Theo bộ đếm của CLI; cách tính cache có thể khác nhau')
 
 function usageEl(u) {
   if (!u) return null
-  const n = v => v != null ? v.toLocaleString('vi-VN') : '—', sec = u.durationMs != null ? u.durationMs / 1000 : null
-  const time = sec == null ? '—' : sec < 60 ? sec.toLocaleString('vi-VN', { maximumFractionDigits: sec < 10 ? 1 : 0 }) + 's'
+  const n = v => v != null ? v.toLocaleString(i18n.locale()) : '—', sec = u.durationMs != null ? u.durationMs / 1000 : null
+  const time = sec == null ? '—' : sec < 60 ? sec.toLocaleString(i18n.locale(), { maximumFractionDigits: sec < 10 ? 1 : 0 }) + 's'
     : `${Math.floor(sec / 60)}m${String(Math.round(sec % 60)).padStart(2, '0')}s`
   const node = el('div', 'usage', [
     `in ${u.inputTokens != null ? short(u.inputTokens) : '—'}`,
     `out ${u.outputTokens != null ? short(u.outputTokens) : '—'}`,
     u.costUsd != null ? '$' + usd(u.costUsd) : '$—',
     time,
-    ...(u.partial ? ['chưa đủ dữ liệu'] : [])
+    ...(u.partial ? [tr('chưa đủ dữ liệu')] : [])
   ].join(' · '))
-  node.title = `Vào ${n(u.inputTokens)} · Ra ${n(u.outputTokens)} token · USD ${n(u.costUsd)}\n${CLI_COUNT_NOTE}`
+  node.title = tr('Vào {input} · Ra {output} token · USD {usd}', { input: n(u.inputTokens), output: n(u.outputTokens), usd: n(u.costUsd) }) + `\n${CLI_COUNT_NOTE}`
   return node
 }
 
 function updateHeaderStats() {
   const t = currentTotals
   const row = (k, v) => { const r = el('div', 'kv'); r.append(el('span', '', k), el('b', '', v)); return r }
-  const notes = [t.tokensIncomplete && 'token chưa đủ dữ liệu', t.costIncomplete && 'chi phí chưa đủ dữ liệu', t.partialLog && 'log chưa đầy đủ'].filter(Boolean)
+  const notes = [t.tokensIncomplete && tr('token chưa đủ dữ liệu'), t.costIncomplete && tr('chi phí chưa đủ dữ liệu'), t.partialLog && tr('log chưa đầy đủ')].filter(Boolean)
   $('#stats').replaceChildren(
-    el('h3', '', 'Chi phí cả box'),
+    el('h3', '', tr('Chi phí cả box')),
     row('Token', t.hasTokens ? short(t.tokens || 0) : t.tokensIncomplete ? '—' : '0'),
     row('USD', t.hasCost ? usd(t.costUsd || 0) : t.costIncomplete ? '—' : '0'),
     ...(notes.length ? [el('small', '', notes.join(' · '))] : []))
-  $('#stats').title = `${(t.tokens || 0).toLocaleString('vi-VN')} token · USD ${(t.costUsd || 0).toLocaleString('vi-VN')}\n${CLI_COUNT_NOTE}`
+  $('#stats').title = `${(t.tokens || 0).toLocaleString(i18n.locale())} token · USD ${(t.costUsd || 0).toLocaleString(i18n.locale())}\n${CLI_COUNT_NOTE}`
 }
 
 function withPreservedScroll(fn) {
@@ -1441,13 +1463,13 @@ function retractButton(m) {
   let armed = null
   const reset = () => { clearTimeout(armed); armed = null; b.classList.remove('armed'); b.replaceChildren(icon('undo')) }
   b.type = 'button'
-  b.title = 'Thu hồi tin này: agent bỏ qua yêu cầu trong tin, lượt chỉ do tin này gọi sẽ dừng'
-  b.setAttribute('aria-label', 'Thu hồi tin này')
+  b.title = tr('Thu hồi tin này: agent bỏ qua yêu cầu trong tin, lượt chỉ do tin này gọi sẽ dừng')
+  b.setAttribute('aria-label', tr('Thu hồi tin này'))
   b.append(icon('undo'))
   b.onclick = async () => {
     if (!armed) {
       b.classList.add('armed')
-      b.replaceChildren(icon('undo', 'lead'), 'Thu hồi?')
+      b.replaceChildren(icon('undo', 'lead'), tr('Thu hồi?'))
       armed = setTimeout(reset, 4000)
       return
     }
@@ -1464,7 +1486,7 @@ function markRetracted(seq) {
   if (node) {
     node.dataset.groupable = '0'
     const body = node.querySelector('.text')
-    if (body) { body.className = 'text retracted'; body.replaceChildren('Bạn đã thu hồi tin này') }
+    if (body) { body.className = 'text retracted'; body.replaceChildren(tr('Bạn đã thu hồi tin này')) }
     reflowLogGroups()
   }
 }
@@ -1472,17 +1494,17 @@ function markRetracted(seq) {
 function renderMergeDetails(ev) {
   if (!ev) return null
   const box = el('details', 'merge-details-box')
-  const summary = el('summary', 'merge-details-summary', 'Chi tiết lỗi merge')
+  const summary = el('summary', 'merge-details-summary', tr('Chi tiết lỗi merge'))
   const body = el('div', 'merge-details-body')
 
   if (ev.phase || ev.category) {
     const row = el('div', 'merge-details-row')
     if (ev.phase) {
-      row.append(el('span', 'merge-details-label', 'Bước: '), el('span', '', ev.phase))
+      row.append(el('span', 'merge-details-label', tr('Bước: ')), el('span', '', ev.phase))
     }
     if (ev.category) {
       if (row.children.length > 0) row.append(' · ')
-      row.append(el('span', 'merge-details-label', 'Loại: '), el('span', '', ev.category))
+      row.append(el('span', 'merge-details-label', tr('Loại: ')), el('span', '', ev.category))
     }
     body.append(row)
   }
@@ -1490,11 +1512,11 @@ function renderMergeDetails(ev) {
   if (ev.candidateSha || ev.sourceSha || ev.headSha) {
     const row = el('div', 'merge-details-row')
     if (ev.candidateSha) {
-      row.append(el('span', 'merge-details-label', 'Candidate SHA: '), el('code', '', ev.candidateSha.slice(0, 7)))
+      row.append(el('span', 'merge-details-label', tr('Candidate SHA: ')), el('code', '', ev.candidateSha.slice(0, 7)))
     }
     if (ev.sourceSha) {
       if (row.children.length > 0) row.append(' · ')
-      row.append(el('span', 'merge-details-label', 'Nguồn SHA: '), el('code', '', ev.sourceSha.slice(0, 7)))
+      row.append(el('span', 'merge-details-label', tr('Nguồn SHA: ')), el('code', '', ev.sourceSha.slice(0, 7)))
     }
     if (!ev.candidateSha && !ev.sourceSha && ev.headSha) {
       row.append(el('span', 'merge-details-label', 'SHA: '), el('code', '', ev.headSha.slice(0, 7)))
@@ -1504,7 +1526,7 @@ function renderMergeDetails(ev) {
 
   if (Array.isArray(ev.files) && ev.files.length > 0) {
     const row = el('div', 'merge-details-row')
-    row.append(el('span', 'merge-details-label', 'Files: '))
+    row.append(el('span', 'merge-details-label', tr('Files: ')))
     ev.files.forEach((f, idx) => {
       if (idx > 0) row.append(', ')
       row.append(el('code', '', f))
@@ -1514,11 +1536,11 @@ function renderMergeDetails(ev) {
 
   if (ev.commandResult) {
     const cmdRow = el('div', 'merge-details-row')
-    cmdRow.append(el('span', 'merge-details-label', 'Lệnh: '))
+    cmdRow.append(el('span', 'merge-details-label', tr('Lệnh: ')))
     cmdRow.append(el('code', '', ev.commandResult.command || ''))
     if (ev.commandResult.exitCode != null || ev.commandResult.signal) {
       cmdRow.append(' · ')
-      cmdRow.append(el('span', 'merge-details-label', 'Mã thoát: '))
+      cmdRow.append(el('span', 'merge-details-label', tr('Mã thoát: ')))
       cmdRow.append(el('span', '', String(ev.commandResult.exitCode != null ? ev.commandResult.exitCode : ev.commandResult.signal)))
     }
     body.append(cmdRow)
@@ -1535,19 +1557,19 @@ function renderMergeDetails(ev) {
 }
 
 const CHAIN_PHASE_LABELS = {
-  draining: 'Đang hoàn tất nhánh',
-  ready: 'Sẵn sàng tiếp tục',
-  continued: 'Đã tiếp tục',
-  interrupted: 'Đã ngắt',
-  unavailable: 'Không khả dụng'
+  draining: tr('Đang hoàn tất nhánh'),
+  ready: tr('Sẵn sàng tiếp tục'),
+  continued: tr('Đã tiếp tục'),
+  interrupted: tr('Đã ngắt'),
+  unavailable: tr('Không khả dụng')
 }
 
 const CHAIN_REASON_TEXTS = {
-  'no-progress': 'Chuỗi không có tiến triển',
-  'turn-limit': 'Đạt giới hạn lượt chạy',
-  'cost-ceiling': 'Đạt trần chi phí chuỗi',
-  'tracking-limit': 'Chạm giới hạn theo dõi',
-  'restart-interrupted': 'Gián đoạn do khởi động lại'
+  'no-progress': tr('Chuỗi không có tiến triển'),
+  'turn-limit': tr('Đạt giới hạn lượt chạy'),
+  'cost-ceiling': tr('Đạt trần chi phí chuỗi'),
+  'tracking-limit': tr('Chạm giới hạn theo dõi'),
+  'restart-interrupted': tr('Gián đoạn do khởi động lại')
 }
 
 function registerChainStopCallback(key, cb) {
@@ -1589,7 +1611,7 @@ async function verifyChainState(messageId, fallback) {
     const res = await api.chainState(reqDir, { messageId })
     if (!sameOpen(reqDir, reqSeq) || box !== reqBox || chainErrors.get(key) !== error) return
     if (!res?.ok || !validChainView(res.state) || (previous?.stopId && res.state.stopId !== previous.stopId))
-      throw new Error(res?.error?.message || 'Không xác minh được trạng thái chuỗi')
+      throw new Error(res?.error?.message || tr('Không xác minh được trạng thái chuỗi'))
     const latest = chainViewFor(key, fallback)
     if (Number(res.state.revision) < Number(latest?.revision || 0)) return
     // Only this fresh IPC (started after the error), or a newer event for this stop, may clear it.
@@ -1605,13 +1627,13 @@ async function verifyChainState(messageId, fallback) {
 
 function chainVerifyButton(messageId, fallback) {
   const reqDir = dir, reqSeq = openSeq, reqBox = box
-  const button = needButton('Kiểm tra lại', async () => {
+  const button = needButton(tr('Kiểm tra lại'), async () => {
     if (button.disabled || !sameOpen(reqDir, reqSeq) || box !== reqBox) return
     button.disabled = true
     await verifyChainState(messageId, fallback)
     if (sameOpen(reqDir, reqSeq) && box === reqBox) button.disabled = false
   })
-  button.title = 'Đọc lại trạng thái từ app, chưa chạy agent'
+  button.title = tr('Đọc lại trạng thái từ app, chưa chạy agent')
   return button
 }
 
@@ -1678,7 +1700,7 @@ function renderChainStopCard(m, sys) {
   card.append(hdr, body, actions)
   sys.append(card)
 
-  const contBtn = el('button', 'box press btn sm primary', 'Tiếp tục')
+  const contBtn = el('button', 'box press btn sm primary', tr('Tiếp tục'))
   contBtn.type = 'button'
   const verifySlot = el('span')
   actions.append(contBtn, verifySlot)
@@ -1697,7 +1719,7 @@ function renderChainStopCard(m, sys) {
 
     if (Array.isArray(state?.running) && state.running.length > 0) {
       const runRow = el('div', 'chain-stop-row')
-      runRow.append(el('span', '', 'Đang chờ hoàn tất: '))
+      runRow.append(el('span', '', tr('Đang chờ hoàn tất: ')))
       state.running.forEach((r, idx) => {
         if (idx > 0) runRow.append(', ')
         runRow.append(el('span', '', `@${r.agent}${r.phase ? ` (${r.phase})` : ''}`))
@@ -1707,19 +1729,20 @@ function renderChainStopCard(m, sys) {
 
     if (Array.isArray(state?.pending) && state.pending.length > 0) {
       const pendRow = el('div', 'chain-stop-row')
-      pendRow.append(el('span', '', 'Chờ tiếp tục cho: '))
+      pendRow.append(el('span', '', tr('Chờ tiếp tục cho: ')))
       state.pending.forEach((p, idx) => {
         if (idx > 0) pendRow.append('; ')
         const pSpan = el('span', '', `@${p.agent}`)
-        if (p.uncertain) pSpan.append(' (chưa rõ kết quả, không tự chạy lại)')
+        if (p.uncertain) pSpan.append(tr(' (chưa rõ kết quả, không tự chạy lại)'))
         if (p.taskIds && p.taskIds.length) {
           pSpan.append(` (task: ${p.taskIds.join(', ')})`)
         }
         if (p.sourceSeqs && p.sourceSeqs.length) {
-          pSpan.append(' (từ ')
+          const [fromBefore, fromAfter] = tr(' (từ {messages})').split('{messages}')
+          pSpan.append(fromBefore)
           p.sourceSeqs.forEach((seq, sIdx) => {
             if (sIdx > 0) pSpan.append(', ')
-            const link = el('a', 'chain-source-link', `tin #${seq}`)
+            const link = el('a', 'chain-source-link', tr('tin #{seq}', { seq }))
             link.role = 'button'
             link.tabIndex = 0
             link.onclick = (e) => { e.preventDefault(); jumpToMessage(seq) }
@@ -1731,7 +1754,7 @@ function renderChainStopCard(m, sys) {
             }
             pSpan.append(link)
           })
-          pSpan.append(')')
+          pSpan.append(fromAfter)
         }
         pendRow.append(pSpan)
       })
@@ -1744,32 +1767,32 @@ function renderChainStopCard(m, sys) {
     if (turns != null || costUsd != null) {
       const statsRow = el('div', 'chain-stop-row muted')
       let parts = []
-      if (turns != null) parts.push(`${turns}${limit != null ? '/' + limit : ''} lượt`)
+      if (turns != null) parts.push(tr('{turns} lượt', { turns: `${turns}${limit != null ? '/' + limit : ''}`, n: turns }))
       if (costUsd != null) parts.push(`$${Number(costUsd).toFixed(3)}`)
       statsRow.textContent = parts.join(' · ')
       body.append(statsRow)
     }
 
     if (state?.costIncomplete || m.chain?.costIncomplete || m.costIncomplete) {
-      body.append(el('div', 'chain-cost-notice muted', 'Chi phí chuỗi chưa đủ dữ liệu'))
+      body.append(el('div', 'chain-cost-notice muted', tr('Chi phí chuỗi chưa đủ dữ liệu')))
     }
 
     if (phase === 'continued') {
       contBtn.disabled = true
-      contBtn.textContent = 'Đã tiếp tục'
-      contBtn.title = state?.continuedTo ? `Đã tiếp tục sang ${state.continuedTo}` : 'Chuỗi đã được tiếp tục'
+      contBtn.textContent = tr('Đã tiếp tục')
+      contBtn.title = state?.continuedTo ? tr('Đã tiếp tục sang {target}', { target: state.continuedTo }) : tr('Chuỗi đã được tiếp tục')
     } else if (phase === 'draining') {
       contBtn.disabled = true
-      contBtn.textContent = 'Tiếp tục'
-      contBtn.title = 'Chờ các nhánh đang chạy hoàn tất trước khi tiếp tục'
+      contBtn.textContent = tr('Tiếp tục')
+      contBtn.title = tr('Chờ các nhánh đang chạy hoàn tất trước khi tiếp tục')
     } else if (!canContinueChain(state || m) || chainErrors.has(msgKey) || statePending) {
       contBtn.disabled = true
-      contBtn.textContent = 'Tiếp tục'
-      contBtn.title = state?.reason?.text || 'Không đủ điều kiện tiếp tục'
+      contBtn.textContent = tr('Tiếp tục')
+      contBtn.title = state?.reason?.text || tr('Không đủ điều kiện tiếp tục')
     } else {
       contBtn.disabled = false
-      contBtn.textContent = 'Tiếp tục'
-      contBtn.title = 'Chạy tiếp chuỗi với bộ đếm mới'
+      contBtn.textContent = tr('Tiếp tục')
+      contBtn.title = tr('Chạy tiếp chuỗi với bộ đếm mới')
     }
     if (continuingChains.has(actionKey)) contBtn.disabled = true
     const error = chainErrors.get(msgKey)
@@ -1805,19 +1828,19 @@ function renderChainStopCard(m, sys) {
     if (contBtn.disabled || continuingChains.has(actionKey) || !sameOpen(thisDir, thisSeq) || box !== thisBox) return
     continuingChains.add(actionKey)
     contBtn.disabled = true
-    contBtn.textContent = 'Đang tiếp tục…'
+    contBtn.textContent = tr('Đang tiếp tục…')
     try {
       const res = await api.continueChain(thisDir, { messageId: m.seq != null ? m.seq : m.runId })
       if (thisDir !== dir || thisSeq !== openSeq || thisBox !== box) return
-      if (!res || !res.ok) throw new Error(res?.error?.message || 'Không thể tiếp tục')
+      if (!res || !res.ok) throw new Error(res?.error?.message || tr('Không thể tiếp tục'))
       if (res.state) {
         applyChainViewUpdate(res.state)
         updateCard(res.state)
       } else if (res.alreadyContinued) {
-        contBtn.textContent = 'Đã tiếp tục'
+        contBtn.textContent = tr('Đã tiếp tục')
         contBtn.disabled = true
       } else {
-        contBtn.textContent = 'Đã tiếp tục'
+        contBtn.textContent = tr('Đã tiếp tục')
       }
     } catch (err) {
       if (thisDir !== dir || thisSeq !== openSeq || thisBox !== box) return
@@ -1869,8 +1892,9 @@ function createMsgElement(m) {
     // one thin strip, collapsed: the file list is one click away
     const card = el('details', 'scope-warning')
     const paths = Array.isArray(m.paths) ? m.paths : [], who = /@([\w-]+)/.exec(m.text || '')?.[1]
-    const turn = who ? ` trong lượt @${who}` : ''
-    card.append(el('summary', '', paths.length ? `${paths.length} file ngoài phạm vi thay đổi${turn}` : `Chưa kiểm tra đủ thay đổi file${turn}`),
+    card.append(el('summary', '', paths.length
+      ? who ? tr('{n} file ngoài phạm vi thay đổi trong lượt @{who}', { n: paths.length, who }) : tr('{n} file ngoài phạm vi thay đổi', { n: paths.length })
+      : who ? tr('Chưa kiểm tra đủ thay đổi file trong lượt @{who}', { who }) : tr('Chưa kiểm tra đủ thay đổi file')),
       el('div', 'scope-warn-text', m.text))
     if (paths.length) {
       const pEl = el('div', 'scope-paths')
@@ -1888,15 +1912,15 @@ function createMsgElement(m) {
       if (details) card.append(details)
     }
     if (m.queueId && m.owner && ['CONFLICT', 'CHECK_FAILED', 'CHECK_MUTATED_TREE'].includes(m.error?.code)) {
-      const repBtn = el('button', 'box press btn sm primary merge-repair-btn', `Gọi @${m.owner} sửa`)
+      const repBtn = el('button', 'box press btn sm primary merge-repair-btn', tr('Gọi @{owner} sửa', { owner: m.owner }))
       repBtn.type = 'button'
       repBtn.dataset.queueId = m.queueId
       const queueItem = (worktreeState?.queue || []).find(q => q.id === m.queueId || q.queueId === m.queueId)
       if (!queueItem || !queueItem.canRepair) {
         repBtn.disabled = true
-        repBtn.title = 'Không thể gọi sửa (đã nhận claim, đã gộp hoặc không còn trong hàng chờ)'
+        repBtn.title = tr('Không thể gọi sửa (đã nhận claim, đã gộp hoặc không còn trong hàng chờ)')
       }
-      repBtn.onclick = () => runMergeAction('requestMergeRepair', m.queueId, repBtn, `Đã yêu cầu @${m.owner} sửa xung đột`)
+      repBtn.onclick = () => runMergeAction('requestMergeRepair', m.queueId, repBtn, tr('Đã yêu cầu @{owner} sửa xung đột', { owner: m.owner }))
       card.append(repBtn)
     }
     node = card
@@ -1904,7 +1928,8 @@ function createMsgElement(m) {
     const card = el('div', 'perm-denied-card')
 
     const hdr = el('div', 'perm-denied-hdr')
-    hdr.append(icon('ban', 'lead'), 'CLI báo từ chối quyền của @', el('span', '', m.agent || 'agent'))
+    const [deniedBefore, deniedAfter] = tr('CLI báo từ chối quyền của @{agent}').split('{agent}')
+    hdr.append(icon('ban', 'lead'), deniedBefore, el('span', '', m.agent || 'agent'), deniedAfter)
     card.append(hdr)
 
     if (m.text) {
@@ -1921,7 +1946,7 @@ function createMsgElement(m) {
       const itemRow = el('div', 'perm-denied-item')
 
       const infoDiv = el('div')
-      const toolB = el('b', '', dItem.tool || 'Công cụ')
+      const toolB = el('b', '', dItem.tool || tr('Công cụ'))
       infoDiv.append(toolB)
       if (dItem.label) {
         infoDiv.append(': ', el('span', '', dItem.label))
@@ -1930,7 +1955,7 @@ function createMsgElement(m) {
 
       if (dItem.rule) {
         const rulePre = el('div', '')
-        rulePre.append('Quy tắc đề xuất: ', el('code', '', dItem.rule))
+        rulePre.append(tr('Quy tắc đề xuất: '), el('code', '', dItem.rule))
         itemRow.append(rulePre)
       }
 
@@ -1946,30 +1971,30 @@ function createMsgElement(m) {
       const canGrantNow = !isBusy && !!pReq && !!dItem.canGrant
 
       if (dItem.canGrant) {
-        const grantBtn = el('button', 'box press btn sm primary btn-grant-perm', 'Cho phép và chạy lại')
+        const grantBtn = el('button', 'box press btn sm primary btn-grant-perm', tr('Cho phép và chạy lại'))
         grantBtn.type = 'button'
         grantBtn.dataset.reqId = reqId || ''
         grantBtn.dataset.denialId = dItem.id || ''
         grantBtn.dataset.agent = m.agent || ''
         grantBtn.disabled = !canGrantNow
-        grantBtn.title = 'Lưu quyền này cho agent và chạy tiếp yêu cầu trước; có thể phát sinh chi phí một lượt'
+        grantBtn.title = tr('Lưu quyền này cho agent và chạy tiếp yêu cầu trước; có thể phát sinh chi phí một lượt')
 
         grantBtn.onclick = async () => {
           if (!reqId || !dItem.id) return
           grantBtn.disabled = true
-          grantBtn.textContent = 'Đang cấp quyền…'
+          grantBtn.textContent = tr('Đang cấp quyền…')
           try {
             const gRes = await api.grantPermissionAndRetry(dir, { requestId: reqId, denialId: dItem.id })
             if (!gRes || !gRes.ok) {
               if (gRes?.error?.permissionSaved) {
-                showToast('Đã lưu quyền nhưng chưa chạy lại được lượt mới: ' + (gRes.error.message || ''))
-                grantBtn.textContent = 'Đã lưu quyền'
+                showToast(tr('Đã lưu quyền nhưng chưa chạy lại được lượt mới: ') + (gRes.error.message || ''))
+                grantBtn.textContent = tr('Đã lưu quyền')
               } else {
-                throw new Error(gRes?.error?.message || 'Cấp quyền thất bại')
+                throw new Error(gRes?.error?.message || tr('Cấp quyền thất bại'))
               }
             } else {
-              showToast('Đã cấp quyền và khởi động lại lượt!')
-              grantBtn.textContent = 'Đã cấp quyền'
+              showToast(tr('Đã cấp quyền và khởi động lại lượt!'))
+              grantBtn.textContent = tr('Đã cấp quyền')
               if (Array.isArray(gRes.team)) {
                 team = gRes.team
                 renderTeam()
@@ -1981,13 +2006,13 @@ function createMsgElement(m) {
           } catch (err) {
             showToast(err.message.replace(/^.*?Error: /, ''))
             grantBtn.disabled = false
-            grantBtn.textContent = 'Cho phép và chạy lại'
+            grantBtn.textContent = tr('Cho phép và chạy lại')
           }
         }
         actRow.append(grantBtn)
       }
 
-      const openBtn = el('button', 'box press btn sm btn-open-perm', 'Mở mục Quyền')
+      const openBtn = el('button', 'box press btn sm btn-open-perm', tr('Mở mục Quyền'))
       openBtn.type = 'button'
       openBtn.onclick = () => {
         openSettingsForAgent(m.agent)
@@ -2001,7 +2026,7 @@ function createMsgElement(m) {
     if (denials.length > 0) {
       card.append(listDiv)
     } else {
-      const noDenials = el('div', 'muted', 'Yêu cầu quyền không có chi tiết.')
+      const noDenials = el('div', 'muted', tr('Yêu cầu quyền không có chi tiết.'))
       card.append(noDenials)
     }
 
@@ -2021,7 +2046,7 @@ function createMsgElement(m) {
     if (cont) row.append(el('div'))
     else {
       const meta = el('div', 'meta')
-      meta.append(el('b', '', m.from === 'user' ? 'Bạn' : '@' + m.from))
+      meta.append(el('b', '', m.from === 'user' ? tr('Bạn') : '@' + m.from))
       const agent = team.find(a => a.name === m.from)
       const cli = m.cli || agent?.cli // what the turn ran on; older messages have no model
       if (cli) meta.append(el('span', 'cli', m.model ? `${cli} · ${m.model}` : cli))
@@ -2029,7 +2054,7 @@ function createMsgElement(m) {
       row.append(avatar(agent || m.from), meta)
       row.firstChild.style.gridRow = 'span 2'
     }
-    const body = el('div', m.retracted ? 'text retracted' : 'text', m.retracted ? 'Bạn đã thu hồi tin này' : null)
+    const body = el('div', m.retracted ? 'text retracted' : 'text', m.retracted ? tr('Bạn đã thu hồi tin này') : null)
     if (!m.retracted) body.append(renderMarkdown(m.text, { dir, fromFile: null, workspace: m.workspace || null }))
     if (usage) body.append(usage)
     if (m.from === 'user' && !m.retracted && m.seq != null) body.append(retractButton(m))
@@ -2062,9 +2087,9 @@ const openLogGroupSeqs = new Set()
 
 function dayLabel(iso, now = new Date()) {
   const d = new Date(iso), days = Math.round((new Date(now.toDateString()) - new Date(d.toDateString())) / 864e5)
-  if (days === 0) return 'Hôm nay'
-  if (days === 1) return 'Hôm qua'
-  return d.toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'numeric', ...(d.getFullYear() !== now.getFullYear() && { year: 'numeric' }) })
+  if (days === 0) return tr('Hôm nay')
+  if (days === 1) return tr('Hôm qua')
+  return d.toLocaleDateString(i18n.locale(), { weekday: 'long', day: 'numeric', month: 'numeric', ...(d.getFullYear() !== now.getFullYear() && { year: 'numeric' }) })
 }
 // a date rule wherever the day changes; redone after every render (the window holds ≤300 rows), which also keeps
 // "Hôm nay" true past midnight. Callers measure scroll after it.
@@ -2225,7 +2250,7 @@ function reflowLogGroups() {
     const btn = el('button', 'sys sys-summary-btn')
     btn.type = 'button'
     btn.setAttribute('aria-expanded', String(isOpen))
-    const span = el('span', '', `${group.length} cập nhật · ${isOpen ? 'Thu gọn' : 'Xem'}`)
+    const span = el('span', '', `${tr('{n} cập nhật', { n: group.length })} · ${isOpen ? tr('Thu gọn') : tr('Xem')}`)
     btn.append(span)
 
     for (const r of group) {
@@ -2235,7 +2260,7 @@ function reflowLogGroups() {
     btn.onclick = () => {
       const willOpen = btn.getAttribute('aria-expanded') !== 'true'
       btn.setAttribute('aria-expanded', String(willOpen))
-      span.textContent = `${group.length} cập nhật · ${willOpen ? 'Thu gọn' : 'Xem'}`
+      span.textContent = `${tr('{n} cập nhật', { n: group.length })} · ${willOpen ? tr('Thu gọn') : tr('Xem')}`
       for (const r of group) {
         r.hidden = !willOpen
         const seq = Number(r.dataset.seq)
@@ -2305,7 +2330,7 @@ function renderLoadedPage(page, mode = 'replace') {
   if (mode !== 'append') logHasBefore = page.hasBefore
   if (mode !== 'prepend') logHasAfter = page.hasAfter || page.end <= newestLiveSeq
   if (page.error) {
-    $('#log-error-banner').replaceChildren(icon('warn', 'lead'), `Lỗi log: ${page.error.message}`)
+    $('#log-error-banner').replaceChildren(icon('warn', 'lead'), tr('Lỗi log: {error}', { error: page.error.message }))
     $('#log-error-banner').hidden = false
   } else {
     $('#log-error-banner').hidden = true
@@ -2405,7 +2430,7 @@ function updateSearchSenderDropdown(senders = []) {
   const sel = $('#search-sender')
   const curVal = sel.value
   const allSenders = new Set(['user', ...team.map(a => a.name), ...senders])
-  sel.replaceChildren(new Option('Tất cả', ''))
+  sel.replaceChildren(new Option(tr('Tất cả'), ''))
   for (const s of [...allSenders].sort()) {
     if (!s) continue
     sel.append(new Option('@' + s, s, false, s === curVal))
@@ -2433,7 +2458,7 @@ async function executeSearch() {
   const thisDir = dir
   const resEl = $('#search-results')
   resEl.hidden = false
-  resEl.replaceChildren(el('div', 'search-status', 'Đang tìm kiếm…'))
+  resEl.replaceChildren(el('div', 'search-status', tr('Đang tìm kiếm…')))
   $('#search-input').setAttribute('aria-expanded', 'true')
   searchResultsData = [] // the shown list is gone: Enter must not jump to a result of the previous query
   searchSelectedIndex = -1
@@ -2454,7 +2479,7 @@ function renderSearchResults(results) {
   searchSelectedIndex = -1
 
   if (results.length === 0) {
-    resEl.append(el('div', 'search-status', 'Không tìm thấy kết quả'))
+    resEl.append(el('div', 'search-status', tr('Không tìm thấy kết quả')))
     return
   }
 
@@ -2465,7 +2490,7 @@ function renderSearchResults(results) {
     btn.setAttribute('aria-selected', 'false')
 
     const meta = el('div', 'search-result-meta')
-    const sender = el('span', 'search-result-sender', r.from === 'user' ? 'Bạn' : '@' + r.from)
+    const sender = el('span', 'search-result-sender', r.from === 'user' ? tr('Bạn') : '@' + r.from)
     const time = el('span', 'search-result-time', when(r.at))
     meta.append(sender, time)
     btn.append(meta)
@@ -2541,7 +2566,7 @@ async function jumpToMessage(seq) {
     target.classList.add('highlight-flash')
     setTimeout(() => target.classList.remove('highlight-flash'), 2000)
   } else {
-    showToast(`Không tìm thấy tin vị trí ${seq} trong cửa sổ`)
+    showToast(tr('Không tìm thấy tin vị trí {seq} trong cửa sổ', { seq }))
   }
 }
 
@@ -2586,18 +2611,18 @@ document.addEventListener('click', e => {
 
 // --- Sprint 6: Worktree & Merge Queue UI ---
 const MERGE_STATE_LABELS = {
-  'queued': 'Chờ merge',
-  'merging': 'Đang merge…',
-  'checking': 'Đang chạy check…',
-  'publishing': 'Đang cập nhật…',
-  'merged': 'Đã gộp',
-  'blocked-dirty': 'Thư mục chính có thay đổi',
-  'blocked-config': 'Lỗi cấu hình',
-  'needs-deps': 'Cần cài dependencies',
-  'conflict': 'Xung đột merge',
-  'check-failed': 'Check thất bại',
-  'paused': 'Tạm dừng',
-  'error': 'Lỗi'
+  'queued': tr('Chờ merge'),
+  'merging': tr('Đang merge…'),
+  'checking': tr('Đang chạy check…'),
+  'publishing': tr('Đang cập nhật…'),
+  'merged': tr('Đã gộp'),
+  'blocked-dirty': tr('Thư mục chính có thay đổi'),
+  'blocked-config': tr('Lỗi cấu hình'),
+  'needs-deps': tr('Cần cài dependencies'),
+  'conflict': tr('Xung đột merge'),
+  'check-failed': tr('Check thất bại'),
+  'paused': tr('Tạm dừng'),
+  'error': tr('Lỗi')
 }
 
 let worktreeLoadError = null
@@ -2611,7 +2636,7 @@ async function loadWorktreeState(targetDir = dir) {
         worktreeState = res.state
         worktreeLoadError = null
       } else {
-        worktreeLoadError = res?.error || { message: 'Lỗi tải trạng thái worktree' }
+        worktreeLoadError = res?.error || { message: tr('Lỗi tải trạng thái worktree') }
       }
       renderWorktreeUI()
     }
@@ -2652,7 +2677,7 @@ function updateChatRepairButtons() {
     const item = (worktreeState?.queue || []).find(q => q.id === qid || q.queueId === qid)
     if (!item || !item.canRepair) {
       btn.disabled = true
-      btn.title = 'Không thể gọi sửa (đã nhận claim, đã gộp hoặc không còn trong hàng chờ)'
+      btn.title = tr('Không thể gọi sửa (đã nhận claim, đã gộp hoặc không còn trong hàng chờ)')
     } else {
       btn.disabled = false
       btn.title = ''
@@ -2666,7 +2691,7 @@ async function runMergeAction(action, queueId, button, successMessage = '') {
   try {
     const res = await api[action](targetDir, { queueId })
     if (targetDir !== dir || thisSeq !== openSeq) return
-    if (!res?.ok) throw new Error(res?.error?.message || 'Không thực hiện được thao tác gộp')
+    if (!res?.ok) throw new Error(res?.error?.message || tr('Không thực hiện được thao tác gộp'))
     if (successMessage) showToast(successMessage)
     await loadWorktreeState(targetDir)
   } catch (e) {
@@ -2709,9 +2734,9 @@ function renderMergeQueue(queue) {
 
     if (item.error) {
       const errDiv = el('div', 'merge-card-err')
-      errDiv.append(el('span', '', item.error.message || 'Lỗi merge'))
+      errDiv.append(el('span', '', item.error.message || tr('Lỗi merge')))
       if (item.error.files && item.error.files.length > 0) {
-        const filesDiv = el('div', '', 'File xung đột: ')
+        const filesDiv = el('div', '', tr('File xung đột: '))
         item.error.files.forEach((f, idx) => {
           if (idx > 0) filesDiv.append(', ')
           filesDiv.append(el('code', '', f))
@@ -2732,30 +2757,30 @@ function renderMergeQueue(queue) {
 
     const actions = el('div', 'merge-card-actions')
     if (item.canRetry) {
-      const retryBtn = el('button', 'box press btn sm', 'Thử gộp lại')
+      const retryBtn = el('button', 'box press btn sm', tr('Thử gộp lại'))
       retryBtn.type = 'button'
       retryBtn.onclick = () => runMergeAction('retryMerge', item.id, retryBtn)
       actions.append(retryBtn)
     }
 
     if (item.canRepair) {
-      const repairBtn = el('button', 'box press btn sm primary', 'Gọi agent sửa')
+      const repairBtn = el('button', 'box press btn sm primary', tr('Gọi agent sửa'))
       repairBtn.type = 'button'
-      repairBtn.onclick = () => runMergeAction('requestMergeRepair', item.id, repairBtn, `Đã yêu cầu @${item.agent} sửa xung đột`)
+      repairBtn.onclick = () => runMergeAction('requestMergeRepair', item.id, repairBtn, tr('Đã yêu cầu @{agent} sửa xung đột', { agent: item.agent }))
       actions.append(repairBtn)
     }
 
     if (item.canStop) {
-      const stopBtn = el('button', 'btn-stop box press', 'Dừng')
+      const stopBtn = el('button', 'btn-stop box press', tr('Dừng'))
       stopBtn.type = 'button'
       stopBtn.onclick = () => runMergeAction('stopMerge', item.id, stopBtn)
       actions.append(stopBtn)
     }
 
     if (item.canReplace) {
-      const replaceBtn = el('button', 'box press btn sm', 'Lấy main (sao lưu nhánh)')
+      const replaceBtn = el('button', 'box press btn sm', tr('Lấy main (sao lưu nhánh)'))
       replaceBtn.type = 'button'
-      replaceBtn.title = 'Dùng khi phần cần giữ đã có trên main; xác nhận trước khi thay nguồn'
+      replaceBtn.title = tr('Dùng khi phần cần giữ đã có trên main; xác nhận trước khi thay nguồn')
       replaceBtn.onclick = () => runMergeAction('replaceMergeSource', item.id, replaceBtn)
       actions.append(replaceBtn)
     }
@@ -2844,7 +2869,7 @@ function renderMentionPopup() {
   popup.replaceChildren()
 
   if (mentionState.matches.length === 0) {
-    const empty = el('div', 'mention-empty', 'Không có thành viên phù hợp')
+    const empty = el('div', 'mention-empty', tr('Không có thành viên phù hợp'))
     popup.append(empty)
     inp.removeAttribute('aria-activedescendant')
     return
@@ -2976,22 +3001,22 @@ function renderOrphanLocks() {
     const list = el('div')
     orphanLocks.forEach(lock => {
       const row = el('div')
-      const stateText = lock.state === 'alive' ? 'tiến trình còn chạy' : 'chưa xác minh'
-      row.textContent = `Agent @${lock.name} đang giữ khóa từ phiên trước (${stateText}).`
+      const stateText = lock.state === 'alive' ? tr('tiến trình còn chạy') : tr('chưa xác minh')
+      row.textContent = tr('Agent @{name} đang giữ khóa từ phiên trước ({state}).', { name: lock.name, state: stateText })
       list.append(row)
     })
     banner.append(list)
 
     const unknownLocks = orphanLocks.filter(l => l.state === 'unknown')
     if (unknownLocks.length > 0) {
-      const btn = el('button', 'btn-stop box press', 'Giải phóng khóa chưa xác minh')
+      const btn = el('button', 'btn-stop box press', tr('Giải phóng khóa chưa xác minh'))
       btn.type = 'button'
       btn.onclick = async () => {
         for (const l of unknownLocks) {
           try {
             const res = await api.releaseLock(dir, l.runId)
             if (!res?.released) {
-              showToast(`Không thể giải phóng khóa của @${l.name}`)
+              showToast(tr('Không thể giải phóng khóa của @{name}', { name: l.name }))
             }
           } catch (err) {
             showToast(err.message.replace(/^.*?Error: /, ''))
@@ -3070,7 +3095,7 @@ function updateMemberPopoverContent(agent) {
   const av = avatar(agent)
   const nw = el('div', 'mp-name-wrap')
   nw.append(el('b', '', '@' + agent.name))
-  const cliParts = [agent.cli, agent.model || 'Mặc định', agent.effort || 'Mặc định'].filter(Boolean).join(' · ')
+  const cliParts = [agent.cli, agent.model || tr('Mặc định'), agent.effort || tr('Mặc định')].filter(Boolean).join(' · ')
   nw.append(el('small', '', cliParts))
   hdr.append(av, nw)
   pop.append(hdr)
@@ -3080,9 +3105,9 @@ function updateMemberPopoverContent(agent) {
   }
 
   const sc = el('div', 'mp-scope')
-  sc.append(el('b', '', 'Phạm vi: '))
+  sc.append(el('b', '', tr('Phạm vi: ')))
   if (agent.readOnly) {
-    const ro = el('span', '', ' [Chỉ đọc]')
+    const ro = el('span', '', tr(' [Chỉ đọc]'))
     ro.style.fontWeight = '700'
     sc.append(ro)
   }
@@ -3090,22 +3115,22 @@ function updateMemberPopoverContent(agent) {
     const ownsText = Array.isArray(agent.owns) ? agent.owns.join(', ') : agent.owns
     sc.append(' ', el('code', '', ownsText))
   } else if (!agent.readOnly) {
-    sc.append(' Toàn dự án')
+    sc.append(tr(' Toàn dự án'))
   }
   pop.append(sc)
 
   const wtAgent = worktreeState?.agents?.find(x => x.name === agent.name)
   if (wtAgent) {
     const wtDiv = el('div', 'mp-worktree')
-    wtDiv.append(el('b', '', 'Nhánh git: '), el('code', '', wtAgent.branch))
+    wtDiv.append(el('b', '', tr('Nhánh git: ')), el('code', '', wtAgent.branch))
     if (wtAgent.ahead > 0) {
-      wtDiv.append(el('span', 'mp-ahead', ` (${wtAgent.ahead} commit chưa gộp)`))
+      wtDiv.append(el('span', 'mp-ahead', tr(' ({n} commit chưa gộp)', { n: wtAgent.ahead })))
     }
     pop.append(wtDiv)
   }
 
   if (agent.scopeNeedsReview) {
-    const warn = warnBanner('Cần xác nhận phạm vi trong Cài đặt')
+    const warn = warnBanner(tr('Cần xác nhận phạm vi trong Cài đặt'))
     pop.append(warn)
   }
 
@@ -3128,27 +3153,27 @@ function updateMemberPopoverContent(agent) {
 
   let sessionText = ''
   if (agent.resume === false) {
-    sessionText = (hasContext ? `${contextTokens.toLocaleString('vi-VN')} token · ` : '') + 'Không nhớ phiên'
+    sessionText = hasContext ? tr('{tokens} token · Không nhớ phiên', { tokens: contextTokens.toLocaleString(i18n.locale()) }) : tr('Không nhớ phiên')
   } else if (!hasContext) {
-    sessionText = 'Chưa có dữ liệu' + (limit === 0 ? ' · Tự xoay: tắt' : '')
+    sessionText = limit === 0 ? tr('Chưa có dữ liệu · Tự xoay: tắt') : tr('Chưa có dữ liệu')
   } else if (limit === 0) {
-    sessionText = `${contextTokens.toLocaleString('vi-VN')} token · Tự xoay: tắt`
+    sessionText = tr('{tokens} token · Tự xoay: tắt', { tokens: contextTokens.toLocaleString(i18n.locale()) })
   } else {
-    sessionText = `${contextTokens.toLocaleString('vi-VN')} / ${limit.toLocaleString('vi-VN')} token`
+    sessionText = tr('{tokens} / {limit} token', { tokens: contextTokens.toLocaleString(i18n.locale()), limit: limit.toLocaleString(i18n.locale()) })
     if (isPending) {
-      sessionText += ' · Sẽ mở phiên mới ở lượt kế tiếp'
+      sessionText += tr(' · Sẽ mở phiên mới ở lượt kế tiếp')
     }
   }
 
   const sessDiv = el('div', 'mp-status')
-  sessDiv.textContent = `Ngữ cảnh bước cuối: ${sessionText}`
-  sessDiv.title = 'Số đo đầu vào của bước cuối, gồm cache, không gồm output.' + (!hasContext ? ' CLI chưa cung cấp số đo ngữ cảnh bước cuối.' : '')
+  sessDiv.textContent = tr('Ngữ cảnh bước cuối: {text}', { text: sessionText })
+  sessDiv.title = tr('Số đo đầu vào của bước cuối, gồm cache, không gồm output.') + (!hasContext ? tr(' CLI chưa cung cấp số đo ngữ cảnh bước cuối.') : '')
   pop.append(sessDiv)
 
   pop.append(el('div', 'mp-status mp-run', memberStatusText(run)))
 
   const actions = el('div', 'mp-actions')
-  const mentionBtn = el('button', 'box press btn sm primary', '@ Gọi')
+  const mentionBtn = el('button', 'box press btn sm primary', tr('@ Gọi'))
   mentionBtn.type = 'button'
   mentionBtn.onclick = () => {
     closeMemberPopover()
@@ -3167,38 +3192,38 @@ function updateMemberPopoverContent(agent) {
 }
 
 function memberStatusText(run) {
-  if (!run) return 'Trạng thái: Rảnh (sẵn sàng)'
-  if (run.stopping) return 'Trạng thái: Đang dừng…'
+  if (!run) return tr('Trạng thái: Rảnh (sẵn sàng)')
+  if (run.stopping) return tr('Trạng thái: Đang dừng…')
   if (run.phase === 'queued') {
     if (run.blockedBy && run.blockedBy.length > 0) {
       const b0 = run.blockedBy[0]
       const file = base(b0.path)
       const more = run.blockedBy.length > 1 ? ` (+${run.blockedBy.length - 1})` : ''
-      return `Trạng thái: Chờ ${b0.name} nhả ${file}${more}`
+      return tr('Trạng thái: Chờ {name} nhả {file}{more}', { name: b0.name, file, more })
     }
-    return 'Trạng thái: Đang xếp hàng'
+    return tr('Trạng thái: Đang xếp hàng')
   }
-  if (run.phase === 'checking') return 'Trạng thái: Đang kiểm tra file…'
-  return `Trạng thái: ${run.label || 'Đang làm…'}`
+  if (run.phase === 'checking') return tr('Trạng thái: Đang kiểm tra file…')
+  return tr('Trạng thái: {label}', { label: run.label || tr('Đang làm…') })
 }
 
 function typingText(run) {
-  let statusText = run.label || 'Đang làm…'
+  let statusText = run.label || tr('Đang làm…')
   if (run.stopping) {
-    statusText = 'Đang dừng…'
+    statusText = tr('Đang dừng…')
   } else if (run.phase === 'queued') {
     if (run.blockedBy && run.blockedBy.length > 0) {
       const b0 = run.blockedBy[0]
       const file = base(b0.path)
       const more = run.blockedBy.length > 1 ? ` (+${run.blockedBy.length - 1})` : ''
-      statusText = `Chờ ${b0.name} nhả ${file}${more}`
+      statusText = tr('Chờ {name} nhả {file}{more}', { name: b0.name, file, more })
     } else {
-      statusText = 'Đang xếp hàng'
+      statusText = tr('Đang xếp hàng')
     }
   } else if (run.phase === 'checking') {
-    statusText = 'Đang kiểm tra file…'
+    statusText = tr('Đang kiểm tra file…')
   }
-  const chainTxt = run.chain ? `lượt ${run.chain.turns} (tối đa ${run.chain.limit}) · ` : ''
+  const chainTxt = run.chain ? tr('lượt {turns} (tối đa {limit}) · ', { turns: run.chain.turns, limit: run.chain.limit }) : ''
   return `@${run.name} · ${chainTxt}${statusText}`
 }
 
@@ -3210,16 +3235,16 @@ function getRunDetailText(run) {
     parts.push(run.label)
   }
   if (run.blockedBy && run.blockedBy.length > 0) {
-    parts.push('Đang chờ các khóa:\n' + run.blockedBy.map(b => `  @${b.name}: ${b.path}`).join('\n'))
+    parts.push(tr('Đang chờ các khóa:') + '\n' + run.blockedBy.map(b => `  @${b.name}: ${b.path}`).join('\n'))
   }
   if (run.chain) {
-    let chainTxt = `Chuỗi agent: lượt ${run.chain.turns} (tối đa ${run.chain.limit})`
+    let chainTxt = tr('Chuỗi agent: lượt {turns} (tối đa {limit})', { turns: run.chain.turns, limit: run.chain.limit })
     if (run.chain.costIncomplete || run.costIncomplete) {
-      chainTxt += ' · Chi phí chuỗi chưa đủ dữ liệu'
+      chainTxt += tr(' · Chi phí chuỗi chưa đủ dữ liệu')
     }
     parts.push(chainTxt)
   } else if (run.costIncomplete) {
-    parts.push('Chi phí chuỗi chưa đủ dữ liệu')
+    parts.push(tr('Chi phí chuỗi chưa đủ dữ liệu'))
   }
   return parts.join('\n\n')
 }
@@ -3238,19 +3263,19 @@ function setRunTime(row, run) {
   if (run.phase === 'queued') {
     t.textContent = clock(elapsed)
     t.classList.toggle('quiet', false)
-    t.title = `Đang chờ từ ${hhmm(run.startedAt)} (${clock(elapsed)})`
+    t.title = tr('Đang chờ từ {time} ({elapsed})', { time: hhmm(run.startedAt), elapsed: clock(elapsed) })
     return
   }
   const times = turnTimes.get(run.name), typical = times?.length >= 3 ? [...times].sort((a, b) => a - b)[times.length >> 1] : null
-  t.textContent = clock(elapsed) + (quiet >= QUIET_MS ? ` · im lặng ${Math.floor(quiet / 60e3)} phút`
-    : typical == null ? '' : typical > elapsed ? ` · còn ~${Math.max(1, Math.round((typical - elapsed) / 60e3))} phút` : ' · lâu hơn thường lệ')
+  t.textContent = clock(elapsed) + (quiet >= QUIET_MS ? tr(' · im lặng {n} phút', { n: Math.floor(quiet / 60e3) })
+    : typical == null ? '' : typical > elapsed ? tr(' · còn ~{n} phút', { n: Math.max(1, Math.round((typical - elapsed) / 60e3)) }) : tr(' · lâu hơn thường lệ'))
   t.classList.toggle('quiet', quiet >= QUIET_MS)
   const limit = team.find(a => a.name === run.name)?.timeoutMinutes ?? 30
-  t.title = `Chạy từ ${hhmm(run.startedAt)} · tự dừng khi quá ${limit} phút\n"còn ~": ước lượng theo trung vị các lượt gần đây của @${run.name}\n"im lặng": chưa có bước mới, agent có thể vẫn đang suy nghĩ hoặc chạy lệnh dài`
+  t.title = tr('Chạy từ {time} · tự dừng khi quá {limit} phút\n"còn ~": ước lượng theo trung vị các lượt gần đây của @{name}\n"im lặng": chưa có bước mới, agent có thể vẫn đang suy nghĩ hoặc chạy lệnh dài', { time: hhmm(run.startedAt), limit, name: run.name })
 }
 
 function setStopButton(btn, run) {
-  btn.textContent = run.stopping ? 'Đang dừng…' : 'Dừng'
+  btn.textContent = run.stopping ? tr('Đang dừng…') : tr('Dừng')
   btn.disabled = run.stopping
 }
 
@@ -3261,7 +3286,7 @@ function patchRun(run) {
   const labelSpan = wrap.querySelector('.typing-label')
   if (labelSpan) labelSpan.textContent = typingText(run)
   const labelBtn = wrap.querySelector('.typing-label-btn')
-  if (labelBtn) labelBtn.setAttribute('aria-label', `${typingText(run)} · Bấm để xem chi tiết`)
+  if (labelBtn) labelBtn.setAttribute('aria-label', typingText(run) + tr(' · Bấm để xem chi tiết'))
   setRunTime(wrap, run)
   setStopButton(wrap.querySelector('.btn-stop'), run)
 
@@ -3333,15 +3358,15 @@ function renderActiveUI() {
       labelBtn.setAttribute('aria-expanded', 'false')
       const labelSpan = el('span', 'typing-label', typingText(run))
       labelBtn.append(labelSpan)
-      labelBtn.title = 'Bấm để xem chi tiết lệnh và tiến trình'
-      labelBtn.setAttribute('aria-label', `${typingText(run)} · Bấm để xem chi tiết`)
+      labelBtn.title = tr('Bấm để xem chi tiết lệnh và tiến trình')
+      labelBtn.setAttribute('aria-label', typingText(run) + tr(' · Bấm để xem chi tiết'))
 
       lead.append(pulse, labelBtn)
 
       const time = el('span', 'typing-time')
       const stopBtn = el('button', 'btn-stop box press')
       stopBtn.type = 'button'
-      stopBtn.setAttribute('aria-label', `Dừng ${run.name}`)
+      stopBtn.setAttribute('aria-label', tr('Dừng {name}', { name: run.name }))
       setStopButton(stopBtn, run)
       stopBtn.onclick = () => stopAgent(run.name, run.runId)
 
@@ -3352,10 +3377,10 @@ function renderActiveUI() {
       detailBox.hidden = true
 
       const detailHdr = el('div', 'typing-detail-hdr')
-      const detailTitle = el('span', 'typing-detail-title', 'Chi tiết lệnh & tiến trình')
-      const detailTrunc = el('span', 'typing-detail-trunc', 'Nội dung đã rút gọn')
+      const detailTitle = el('span', 'typing-detail-title', tr('Chi tiết lệnh & tiến trình'))
+      const detailTrunc = el('span', 'typing-detail-trunc', tr('Nội dung đã rút gọn'))
       detailTrunc.hidden = !run.detailTruncated
-      const copyBtn = el('button', 'typing-copy-btn btn sm box press', 'Sao chép')
+      const copyBtn = el('button', 'typing-copy-btn btn sm box press', tr('Sao chép'))
       copyBtn.type = 'button'
 
       detailHdr.append(detailTitle, detailTrunc, copyBtn)
@@ -3366,7 +3391,7 @@ function renderActiveUI() {
       copyBtn.onclick = async () => {
         try {
           await navigator.clipboard.writeText(pre.textContent)
-          showToast('Đã sao chép chi tiết lệnh')
+          showToast(tr('Đã sao chép chi tiết lệnh'))
         } catch (_) {}
       }
 
@@ -3427,10 +3452,10 @@ function renderTeam() {
 }
 
 const STATUS_MAP = {
-  doing: 'Đang chạy',
-  review: 'Chờ duyệt',
-  todo: 'Cần làm',
-  done: 'Xong'
+  doing: tr('Đang chạy'),
+  review: tr('Chờ duyệt'),
+  todo: tr('Cần làm'),
+  done: tr('Xong')
 }
 let currentTasks = []
 let taskGen = 0
@@ -3457,7 +3482,7 @@ async function loadTasks() {
 function renderBoard(error = null) {
   const errBanner = $('#task-error')
   if (error) {
-    errBanner.textContent = `Lỗi dữ liệu task: ${error.message || error.code}`
+    errBanner.textContent = tr('Lỗi dữ liệu task: {error}', { error: error.message || error.code })
     errBanner.hidden = false
   } else {
     errBanner.hidden = true
@@ -3518,7 +3543,7 @@ function renderTreeTaskRow(task) {
     titleEl.role = 'button'
     titleEl.setAttribute('tabindex', '0')
     titleEl.setAttribute('role', 'button')
-    titleEl.title = `Mở spec: ${task.spec} · ${task.title}`
+    titleEl.title = tr('Mở spec: {spec} · {title}', { spec: task.spec, title: task.title })
     titleEl.onclick = (e) => {
       e.stopPropagation()
       openFileViewer(task.spec, null)
@@ -3545,9 +3570,9 @@ function renderTreeTaskRow(task) {
 // ---- "Cần bạn": what waits for the user — agents' @user asks, paused chains, CLI permission requests ----
 let needs = []
 const NEED_LINE = /@user(?![\w-])/i
-const needTitle = m => m.kind === 'chain-stop' ? 'Chuỗi agent tạm dừng, chờ bạn'
-  : m.kind === 'permission-denied' ? `@${m.agent} bị CLI từ chối quyền`
-    : m.from !== 'user' && m.from !== 'system' && NEED_LINE.test(m.text || '') ? `@${m.from} cần bạn` : null
+const needTitle = m => m.kind === 'chain-stop' ? tr('Chuỗi agent tạm dừng, chờ bạn')
+  : m.kind === 'permission-denied' ? tr('@{agent} bị CLI từ chối quyền', { agent: m.agent })
+    : m.from !== 'user' && m.from !== 'system' && NEED_LINE.test(m.text || '') ? tr('@{agent} cần bạn', { agent: m.from }) : null
 
 async function refreshNeeds() {
   if (!dir) return
@@ -3559,7 +3584,7 @@ async function refreshNeeds() {
 }
 
 // one-line previews (notifications, cards, quotes) show "[ảnh]" instead of the markdown of an image
-const imageLabels = text => text.replace(/!\[([^\]]*)\]\([^)\s]*\)/g, (_, alt) => `[${alt || 'ảnh'}]`)
+const imageLabels = text => text.replace(/!\[([^\]]*)\]\([^)\s]*\)/g, (_, alt) => `[${alt || tr('ảnh')}]`)
 
 // a system notification while the window is in the background; clicking it brings the message up
 function notifyNeed(d, m, title) {
@@ -3577,7 +3602,7 @@ function markActiveBadge() {
 // the reply goes to the agent that asked and quotes the ask: it may have asked several things
 function replyAbout(item) {
   const quote = imageLabels(item.text).replace(/@user(?![\w-])/gi, '').replace(/\s+/g, ' ').trim()
-  return `(về tin ${hhmm(item.at)}: "${quote.length > 60 ? quote.slice(0, 60) + '…' : quote}")`
+  return tr('(về tin {time}: "{quote}")', { time: hhmm(item.at), quote: quote.length > 60 ? quote.slice(0, 60) + '…' : quote })
 }
 function prefill(text) {
   const inp = $('#input')
@@ -3596,7 +3621,7 @@ async function needAction(button, call) {
   button.disabled = true
   try {
     const res = await call()
-    if (res?.ok === false) throw new Error(res.error?.message || 'Không thực hiện được')
+    if (res?.ok === false) throw new Error(res.error?.message || tr('Không thực hiện được'))
   } catch (err) {
     showToast(err.message.replace(/^.*?Error: /, ''))
     button.disabled = false
@@ -3605,7 +3630,7 @@ async function needAction(button, call) {
 
 function renderNeeds() {
   const perms = permissionRequests.map(request => ({ kind: 'perm', from: request.agent,
-    text: (request.denials || []).map(x => x.label || x.tool).filter(Boolean).join(', ') || 'CLI từ chối quyền' }))
+    text: (request.denials || []).map(x => x.label || x.tool).filter(Boolean).join(', ') || tr('CLI từ chối quyền') }))
   const items = [...perms, ...needs]
   $('#needs-sec').hidden = !items.length
   $('#needs-count').textContent = items.length
@@ -3617,7 +3642,7 @@ function renderNeeds() {
     const paused = el('span', 'sq')
     paused.append(icon('pause'))
     head.append(item.kind === 'chain' ? paused : avatar(item.from, 'sq'),
-      el('b', '', item.kind === 'chain' ? 'Chuỗi tạm dừng' : item.kind === 'perm' ? `@${item.from} cần quyền` : `@${item.from}`))
+      el('b', '', item.kind === 'chain' ? tr('Chuỗi tạm dừng') : item.kind === 'perm' ? tr('@{agent} cần quyền', { agent: item.from }) : `@${item.from}`))
     if (item.at) head.append(el('time', '', hhmm(item.at)))
     if (item.kind !== 'perm') { // a permission request leaves once granted or dropped
       const hide = needButton('', () => needAction(hide, async () => {
@@ -3626,33 +3651,33 @@ function renderNeeds() {
         return res
       }), 'need-x')
       hide.append(icon('close'))
-      hide.title = 'Đã xem, ẩn khỏi danh sách'
-      hide.setAttribute('aria-label', 'Ẩn mục này')
+      hide.title = tr('Đã xem, ẩn khỏi danh sách')
+      hide.setAttribute('aria-label', tr('Ẩn mục này'))
       head.append(hide)
     }
     const text = el('button', 'need-text', imageLabels(item.text))
     text.type = 'button'
-    text.title = item.kind === 'perm' ? 'Mở mục Quyền' : 'Xem trong cuộc trò chuyện'
+    text.title = item.kind === 'perm' ? tr('Mở mục Quyền') : tr('Xem trong cuộc trò chuyện')
     text.onclick = () => item.kind === 'perm' ? openSettingsForAgent(item.from) : jumpToMessage(item.seq)
     const actions = el('div', 'need-actions')
     if (item.kind === 'ask') {
-      const approve = needButton('Duyệt', () => needAction(approve, () => api.send(dir, `@${item.from} Duyệt ${replyAbout(item)}`)), 'btn sm primary')
+      const approve = needButton(tr('Duyệt'), () => needAction(approve, () => api.send(dir, tr('@{agent} Duyệt {about}', { agent: item.from, about: replyAbout(item) }))), 'btn sm primary')
       actions.append(approve,
-        needButton('Yêu cầu sửa', () => prefill(`@${item.from} Yêu cầu sửa ${replyAbout(item)}: `)),
-        needButton('Từ chối', () => prefill(`@${item.from} Từ chối ${replyAbout(item)}: `)))
+        needButton(tr('Yêu cầu sửa'), () => prefill(tr('@{agent} Yêu cầu sửa {about}: ', { agent: item.from, about: replyAbout(item) }))),
+        needButton(tr('Từ chối'), () => prefill(tr('@{agent} Từ chối {about}: ', { agent: item.from, about: replyAbout(item) }))))
     } else if (item.kind === 'chain') {
       const msgKey = String(item.seq)
       const cView = chainViewFor(msgKey, item.chainView || item)
       const thisDir = dir, thisSeq = openSeq, thisBox = box, actionKey = `${openSeq}:${msgKey}`
-      const resume = needButton('Tiếp tục', async () => {
+      const resume = needButton(tr('Tiếp tục'), async () => {
         if (resume.disabled || continuingChains.has(actionKey) || !sameOpen(thisDir, thisSeq) || box !== thisBox) return
         continuingChains.add(actionKey); resume.disabled = true
         try {
           const res = await api.continueChain(thisDir, { messageId: item.seq })
           if (!sameOpen(thisDir, thisSeq) || box !== thisBox) return
-          if (!res?.ok) throw new Error(res?.error?.message || 'Không thể tiếp tục')
+          if (!res?.ok) throw new Error(res?.error?.message || tr('Không thể tiếp tục'))
           if (res.state) applyChainViewUpdate(res.state)
-          resume.textContent = 'Đã tiếp tục'
+          resume.textContent = tr('Đã tiếp tục')
         } catch (err) {
           if (sameOpen(thisDir, thisSeq) && box === thisBox) {
             showToast(err.message.replace(/^.*?Error: /, ''))
@@ -3662,17 +3687,17 @@ function renderNeeds() {
       }, 'btn sm primary')
       if (cView.phase === 'continued') {
         resume.disabled = true
-        resume.textContent = 'Đã tiếp tục'
-        resume.title = 'Chuỗi đã được tiếp tục'
+        resume.textContent = tr('Đã tiếp tục')
+        resume.title = tr('Chuỗi đã được tiếp tục')
       } else if (cView.phase === 'draining') {
         resume.disabled = true
-        resume.title = 'Chờ các nhánh đang chạy hoàn tất trước khi tiếp tục'
+        resume.title = tr('Chờ các nhánh đang chạy hoàn tất trước khi tiếp tục')
       } else if (!canContinueChain(cView)) {
         resume.disabled = true
-        resume.title = cView.reason?.text || 'Không thể tiếp tục'
+        resume.title = cView.reason?.text || tr('Không thể tiếp tục')
       } else {
         resume.disabled = false
-        resume.title = 'Chạy tiếp chuỗi với bộ đếm mới'
+        resume.title = tr('Chạy tiếp chuỗi với bộ đếm mới')
       }
       if (continuingChains.has(actionKey)) resume.disabled = true
       actions.append(resume)
@@ -3681,33 +3706,33 @@ function renderNeeds() {
         resume.disabled = true; resume.title = error.message
         actions.append(chainVerifyButton(item.seq, cView))
       }
-    } else actions.append(needButton('Mở mục Quyền', () => openSettingsForAgent(item.from)))
+    } else actions.append(needButton(tr('Mở mục Quyền'), () => openSettingsForAgent(item.from)))
     card.append(head, text, actions)
     return card
   }))
 }
 
 // ---- timeline: which agent ran when and for how long; the log's finished turns plus the ones running now ----
-const TL_RANGES = [['1 giờ', 3600e3], ['6 giờ', 6 * 3600e3], ['24 giờ', 86400e3], ['7 ngày', 7 * 86400e3]]
-const TL_OUTCOME = { success: 'xong', error: 'lỗi', timeout: 'quá giờ', stopped: 'đã dừng', running: 'đang chạy' }
+const TL_RANGES = [[tr('1 giờ'), 3600e3], [tr('6 giờ'), 6 * 3600e3], [tr('24 giờ'), 86400e3], [tr('7 ngày'), 7 * 86400e3]]
+const TL_OUTCOME = { success: tr('xong'), error: tr('lỗi'), timeout: tr('quá giờ'), stopped: tr('đã dừng'), running: tr('đang chạy') }
 let tl = null, tlSpan = null, tlGen = 0
 
 // ponytail: reads back 7 days at most; add paging by range if older history matters
 async function openTimeline() {
   const reqDir = dir, gen = ++tlGen, now = Date.now()
   if (!$('#timeline').open) $('#timeline').showModal()
-  $('#timeline-body').replaceChildren(el('div', 'none', 'Đang tải…'))
+  $('#timeline-body').replaceChildren(el('div', 'none', tr('Đang tải…')))
   const res = await api.timeline(reqDir, now - TL_RANGES.at(-1)[1]).catch(err => ({ ok: false, error: { message: err.message } }))
   if (gen !== tlGen || dir !== reqDir) return
-  if (!res.ok) return $('#timeline-body').replaceChildren(el('div', 'viewer-error', res.error?.message || 'Không đọc được lịch sử'))
+  if (!res.ok) return $('#timeline-body').replaceChildren(el('div', 'viewer-error', res.error?.message || tr('Không đọc được lịch sử')))
   tl = { runs: res.runs, now }
   // opens on the shortest range that reaches the latest turn
   tlSpan = TL_RANGES.find(([, ms]) => res.last != null && now - res.last <= ms)?.[1] ?? TL_RANGES.at(-1)[1]
   renderTimeline()
 }
 
-const roughDuration = ms => ms < 60e3 ? `${Math.round(ms / 1e3)} giây` : ms < 3600e3 ? `${Math.round(ms / 60e3)} phút`
-  : `${(ms / 3600e3).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} giờ`
+const roughDuration = ms => ms < 60e3 ? tr('{n} giây', { n: Math.round(ms / 1e3) }) : ms < 3600e3 ? tr('{n} phút', { n: Math.round(ms / 60e3) })
+  : tr('{n} giờ', { n: (ms / 3600e3).toLocaleString(i18n.locale(), { maximumFractionDigits: 1 }) })
 
 function renderTimeline() {
   const { now } = tl, span = tlSpan, from = now - span, at = t => span > 86400e3 ? when(t) : hhmm(t)
@@ -3718,7 +3743,7 @@ function renderTimeline() {
   const pct = t => `${(t - from) / span * 100}%`
 
   for (const b of $('#timeline-range').children) b.classList.toggle('on', +b.dataset.span === span)
-  $('#timeline-sub').textContent = `${runs.length} lượt · ${at(from)} → bây giờ`
+  $('#timeline-sub').textContent = tr('{n} lượt · {from} → bây giờ', { n: runs.length, from: at(from) })
 
   // gridlines on local-time boundaries, at most 8 of them
   const step = [5, 10, 15, 30, 60, 120, 180, 360, 720, 1440].map(m => m * 60e3).find(ms => span / ms <= 8)
@@ -3735,14 +3760,14 @@ function renderTimeline() {
     const busy = mine.reduce((n, r) => n + r.end - Math.max(r.start, from), 0)
     const row = el('div', 'tl-row'), who = el('div', 'tl-who'), lane = el('div', 'tl-lane')
     const label = el('div')
-    label.append(el('b', '', '@' + name), el('small', '', mine.length ? `${mine.length} lượt · ${roughDuration(busy)}` : 'rảnh'))
+    label.append(el('b', '', '@' + name), el('small', '', mine.length ? tr('{n} lượt · {duration}', { n: mine.length, duration: roughDuration(busy) }) : tr('rảnh')))
     who.append(avatar(name, 'sq'), label)
     lane.style.setProperty('--agent', getAgentAvatar(name)?.color || '#a1a1aa')
     lane.append(...lines(), ...mine.map(r => {
       const start = Math.max(r.start, from), bar = el(r.seq != null ? 'button' : 'span', 'tl-bar ' + r.outcome)
       bar.style.left = pct(start)
       bar.style.width = `${(r.end - start) / span * 100}%`
-      bar.title = `@${name} · ${at(r.start)}–${r.outcome === 'running' ? 'bây giờ' : hhmm(r.end)} · ${roughDuration(r.end - r.start)} · ${TL_OUTCOME[r.outcome] || r.outcome}`
+      bar.title = `@${name} · ${at(r.start)}–${r.outcome === 'running' ? tr('bây giờ') : hhmm(r.end)} · ${roughDuration(r.end - r.start)} · ${TL_OUTCOME[r.outcome] || r.outcome}`
       if (r.seq != null) {
         bar.type = 'button'
         bar.onclick = () => { $('#timeline').close(); jumpToMessage(r.seq) }
@@ -3754,13 +3779,13 @@ function renderTimeline() {
   })
 
   const legend = el('div', 'tl-legend')
-  for (const [cls, label] of [['success', 'Xong (màu của agent)'], ['error', 'Lỗi'], ['stopped', 'Dừng / quá giờ'], ['running', 'Đang chạy']]) {
+  for (const [cls, label] of [['success', tr('Xong (màu của agent)')], ['error', tr('Lỗi')], ['stopped', tr('Dừng / quá giờ')], ['running', tr('Đang chạy')]]) {
     const item = el('span'), swatch = el('i', 'tl-bar ' + cls)
     swatch.style.setProperty('--agent', '#a1a1aa')
     item.append(swatch, label)
     legend.append(item)
   }
-  $('#timeline-body').replaceChildren(axis, ...rows, ...(runs.length ? [] : [el('div', 'none', 'Không có lượt nào trong khoảng này.')]), legend)
+  $('#timeline-body').replaceChildren(axis, ...rows, ...(runs.length ? [] : [el('div', 'none', tr('Không có lượt nào trong khoảng này.'))]), legend)
 }
 
 $('#timeline-btn').onclick = openTimeline
@@ -3898,8 +3923,8 @@ function applyViewerLayout() {
     dialog.style.height = 'calc(100vh - 32px)'
     dialog.style.resize = 'none'
     if (maxBtn) {
-      maxBtn.textContent = 'Thu nhỏ'
-      maxBtn.title = 'Thu nhỏ khung xem'
+      maxBtn.textContent = tr('Thu nhỏ')
+      maxBtn.title = tr('Thu nhỏ khung xem')
       if (typeof maxBtn.setAttribute === 'function') maxBtn.setAttribute('aria-pressed', 'true')
     }
   } else {
@@ -3909,8 +3934,8 @@ function applyViewerLayout() {
     dialog.style.height = clamped.height + 'px'
     dialog.style.resize = 'both'
     if (maxBtn) {
-      maxBtn.textContent = 'Phóng to'
-      maxBtn.title = 'Phóng to khung xem'
+      maxBtn.textContent = tr('Phóng to')
+      maxBtn.title = tr('Phóng to khung xem')
       if (typeof maxBtn.setAttribute === 'function') maxBtn.setAttribute('aria-pressed', 'false')
     }
   }
@@ -4061,10 +4086,10 @@ async function openFileViewer(href, fromFile = null, workspace = null) {
   viewerIsMaximized = storedLayout.maximized
   applyViewerLayout()
 
-  let branchLabel = workspace?.branch ? ` [Nhánh ${workspace.branch}]` : ''
+  let branchLabel = workspace?.branch ? tr(' [Nhánh {branch}]', { branch: workspace.branch }) : ''
   if (titleEl) titleEl.textContent = base(href) + branchLabel
   if (pathEl) pathEl.textContent = href
-  if (bodyEl) bodyEl.replaceChildren(el('div', 'none', 'Đang tải…'))
+  if (bodyEl) bodyEl.replaceChildren(el('div', 'none', tr('Đang tải…')))
   if (extBtn) extBtn.disabled = true
 
   if (imgControls) { imgControls.style = imgControls.style || {}; imgControls.style.display = 'none' }
@@ -4095,7 +4120,7 @@ async function openFileViewer(href, fromFile = null, workspace = null) {
       }
       if (Object.hasOwn(res, 'workspace')) workspace = res.workspace
       currentViewerWorkspace = workspace
-      branchLabel = workspace?.branch ? ` [Nhánh ${workspace.branch}]` : ''
+      branchLabel = workspace?.branch ? tr(' [Nhánh {branch}]', { branch: workspace.branch }) : ''
 
       if (res.ok) {
         if (currentPreviewId && currentPreviewId !== res.preview.id) {
@@ -4140,7 +4165,7 @@ async function openFileViewer(href, fromFile = null, workspace = null) {
         if (htmlExtBtn) { htmlExtBtn.style = htmlExtBtn.style || {}; htmlExtBtn.style.display = 'none' }
         if (htmlTabs) { htmlTabs.style = htmlTabs.style || {}; htmlTabs.style.display = 'none' }
         if (noticeEl) { noticeEl.style = noticeEl.style || {}; noticeEl.style.display = 'none' }
-        const errDiv = el('div', 'viewer-error', res.message || 'Không thể xem trước HTML')
+        const errDiv = el('div', 'viewer-error', res.message || tr('Không thể xem trước HTML'))
         if (bodyEl) bodyEl.replaceChildren(errDiv)
       }
     } else if (isImage && typeof api !== 'undefined' && typeof api.readImage === 'function') {
@@ -4148,7 +4173,7 @@ async function openFileViewer(href, fromFile = null, workspace = null) {
       if (thisGen !== viewerGen) return
       if (Object.hasOwn(res, 'workspace')) workspace = res.workspace
       currentViewerWorkspace = workspace
-      branchLabel = workspace?.branch ? ` [Nhánh ${workspace.branch}]` : ''
+      branchLabel = workspace?.branch ? tr(' [Nhánh {branch}]', { branch: workspace.branch }) : ''
 
       if (res.ok) {
         currentViewerPath = res.path
@@ -4172,7 +4197,7 @@ async function openFileViewer(href, fromFile = null, workspace = null) {
         img.alt = res.name || base(res.path)
         img.onerror = () => {
           if (thisGen !== viewerGen) return
-          if (bodyEl) bodyEl.replaceChildren(el('div', 'viewer-error', 'Ảnh lỗi hoặc không được hỗ trợ'))
+          if (bodyEl) bodyEl.replaceChildren(el('div', 'viewer-error', tr('Ảnh lỗi hoặc không được hỗ trợ')))
         }
         img.src = currentViewerBlobUrl
         wrap.append(img)
@@ -4190,7 +4215,7 @@ async function openFileViewer(href, fromFile = null, workspace = null) {
           extBtn.style.display = ''
           extBtn.disabled = !currentViewerCanExternal
         }
-        const errDiv = el('div', 'viewer-error', res.message || 'Không thể đọc ảnh')
+        const errDiv = el('div', 'viewer-error', res.message || tr('Không thể đọc ảnh'))
         if (bodyEl) bodyEl.replaceChildren(errDiv)
       }
     } else {
@@ -4199,7 +4224,7 @@ async function openFileViewer(href, fromFile = null, workspace = null) {
       if (thisGen !== viewerGen) return
       if (Object.hasOwn(res, 'workspace')) workspace = res.workspace
       currentViewerWorkspace = workspace
-      branchLabel = workspace?.branch ? ` [Nhánh ${workspace.branch}]` : ''
+      branchLabel = workspace?.branch ? tr(' [Nhánh {branch}]', { branch: workspace.branch }) : ''
 
       if (res.ok) {
         const file = res.file
@@ -4226,7 +4251,7 @@ async function openFileViewer(href, fromFile = null, workspace = null) {
         if (titleEl) titleEl.textContent = (res.file?.name || base(href)) + branchLabel
         if (pathEl) pathEl.textContent = currentViewerPath
         if (extBtn) extBtn.disabled = !currentViewerCanExternal
-        const errDiv = el('div', 'viewer-error', res.message || 'Không thể đọc file')
+        const errDiv = el('div', 'viewer-error', res.message || tr('Không thể đọc file'))
         if (bodyEl) bodyEl.replaceChildren(errDiv)
       }
     }
@@ -4401,7 +4426,7 @@ async function refreshFiles() {
         try { localStorage.setItem(storageKey, JSON.stringify(storedStates)) } catch (_) {}
       }
 
-      const sum = el('summary', 'file-group-sum', `Khác · ${otherFiles.length}`)
+      const sum = el('summary', 'file-group-sum', tr('Khác · {n}', { n: otherFiles.length }))
       const itemsDiv = el('div', 'file-group-items')
       itemsDiv.append(...otherFiles.map(makeFileButton))
       details.append(sum, itemsDiv)
@@ -4435,7 +4460,7 @@ $('#new').onclick = async () => {
 $('#form').onsubmit = e => {
   e.preventDefault()
   const typed = $('#input').value, images = composerImages
-  const text = [typed.trim(), ...images.map(file => `![ảnh](${file})`)].filter(Boolean).join('\n')
+  const text = [typed.trim(), ...images.map(file => tr('![ảnh]({file})', { file }))].filter(Boolean).join('\n')
   if (!text || !dir) return
   $('#input').value = ''
   setComposerImages([])
@@ -4460,10 +4485,10 @@ function setComposerImages(list) {
     const img = el('img'), remove = el('button', 'attach-x')
     remove.append(icon('close'))
     img.dataset.src = file
-    img.alt = 'ảnh'
+    img.alt = tr('ảnh')
     remove.type = 'button'
-    remove.title = 'Bỏ ảnh này'
-    remove.setAttribute('aria-label', 'Bỏ ảnh này')
+    remove.title = tr('Bỏ ảnh này')
+    remove.setAttribute('aria-label', tr('Bỏ ảnh này'))
     remove.onclick = () => { setComposerImages(composerImages.filter((_, j) => j !== i)); $('#input').focus() }
     const item = el('div', 'attach')
     item.append(img, remove)
@@ -4486,7 +4511,7 @@ async function attachImages(files) {
   const target = dir
   for (const file of files) {
     try {
-      if (file.size > 10 * 1024 * 1024) throw new Error(`${file.name} vượt quá 10 MiB`)
+      if (file.size > 10 * 1024 * 1024) throw new Error(tr('{name} vượt quá 10 MiB', { name: file.name }))
       const res = await api.saveImage(target, new Uint8Array(await file.arrayBuffer()))
       if (!res.ok) throw new Error(res.error.message)
       if (dir !== target) return // switched box meanwhile: this composer belongs to another one
@@ -4508,7 +4533,7 @@ document.addEventListener('drop', e => {
   if ($('#input').disabled) return
   const files = imageFiles(e.dataTransfer.files)
   if (files.length) attachImages(files)
-  else showToast('Chỉ đính kèm được ảnh PNG, JPEG, GIF hoặc WebP')
+  else showToast(tr('Chỉ đính kèm được ảnh PNG, JPEG, GIF hoặc WebP'))
 })
 
 const inp = $('#input')
@@ -4688,7 +4713,7 @@ function renderSwitcher() {
     b.onclick = () => { $('#switcher').close(); openProject(p.dir, p.chat) }
     return b
   }))
-  if (!hits.length) $('#switcher-list').append(el('div', 'none', 'Không có không gian phù hợp'))
+  if (!hits.length) $('#switcher-list').append(el('div', 'none', tr('Không có không gian phù hợp')))
   $('#switcher-list .on')?.scrollIntoView({ block: 'nearest' })
 }
 $('#switcher-input').oninput = () => { switcherPick = 0; renderSwitcher() }
@@ -4721,7 +4746,7 @@ api.on('menu', action => {
     const at = projectList.findIndex(p => p.dir === dir && p.chat === box)
     const next = [...projectList.slice(at + 1), ...projectList.slice(0, Math.max(at, 0))].find(p => p.needs)
     if (next) openProject(next.dir, next.chat)
-    else showToast('Không box nào khác đang cần bạn')
+    else showToast(tr('Không box nào khác đang cần bạn'))
   } else if (action === 'search' && !$('#search-wrap').hidden) {
     $('#search-input').focus()
     $('#search-input').select()
@@ -4746,11 +4771,11 @@ function renderClis() {
   $('#cli-check').disabled = Object.keys(cliPending).length > 0
   $('#cli-list').replaceChildren(...cliState.bins.map(({ bin, path, found }) => {
     const row = el('div', 'cli-row'), head = el('div', 'cli-row-head'), checking = bin in cliPending, v = cliResult.bins[bin]
-    head.append(el('b', '', bin), checking ? el('span', 'cli-status', 'Đang kiểm tra…')
+    head.append(el('b', '', bin), checking ? el('span', 'cli-status', tr('Đang kiểm tra…'))
       : v ? el('span', 'cli-status ' + (v.error ? 'bad' : 'good'), v.error || v.version) : '')
-    const select = el('select', 'f'), pick = el('button', 'box press btn sm', 'Thêm thủ công…')
-    select.setAttribute('aria-label', `File chạy của ${bin}`)
-    select.append(new Option(found[0] ? `Tự động · ${found[0]}` : 'Tự động · chưa tìm thấy', ''))
+    const select = el('select', 'f'), pick = el('button', 'box press btn sm', tr('Thêm thủ công…'))
+    select.setAttribute('aria-label', tr('File chạy của {bin}', { bin }))
+    select.append(new Option(found[0] ? tr('Tự động · {path}', { path: found[0] }) : tr('Tự động · chưa tìm thấy'), ''))
     for (const file of new Set([...found, ...(path ? [path] : [])])) select.append(new Option(file, file))
     select.value = path || ''
     select.onchange = () => setCliPath(bin, select.value || null)
@@ -4759,7 +4784,7 @@ function renderClis() {
     const where = el('div', 'cli-path'); where.append(select, pick)
     row.append(head, where, ...cliState.accounts.filter(name => cliOf(name) === bin).map(name => {
       const r = !checking && cliResult.accounts[name], line = el('div', 'cli-account' + (r ? r.ok ? ' good' : ' bad' : ''))
-      line.append(icon(r ? r.ok ? 'check' : 'close' : 'refresh', 'lead'), el('b', '', name), r ? r.ok ? r.detail : r.error : 'chưa kiểm tra')
+      line.append(icon(r ? r.ok ? 'check' : 'close' : 'refresh', 'lead'), el('b', '', name), r ? r.ok ? r.detail : r.error : tr('chưa kiểm tra'))
       return line
     }))
     return row
@@ -4780,14 +4805,14 @@ async function checkClis(bin = null) {
 }
 async function setCliPath(bin, file) {
   const r = await api.setCliPath(bin, file)
-  if (!r.ok) { showToast(r.error?.message || 'Không lưu được đường dẫn'); renderClis(); return }
+  if (!r.ok) { showToast(r.error?.message || tr('Không lưu được đường dẫn')); renderClis(); return }
   cliState = r; checkClis(bin)
 }
 let cliScan = null
 const scanClis = () => cliScan ??= api.cliSettings().then(state => { cliState = state; checkClis() }).finally(() => { cliScan = null })
 $('#cli-scan').onclick = async () => {
   await scanClis()
-  showToast(`Tìm thấy ${cliState.bins.reduce((n, b) => n + b.found.length, 0)} file chạy`)
+  showToast(tr('Tìm thấy {n} file chạy', { n: cliState.bins.reduce((n, b) => n + b.found.length, 0) }))
 }
 $('#cli-check').onclick = () => checkClis()
 
@@ -4807,8 +4832,8 @@ async function renderFont() {
   fontFamilies ??= await (window.queryLocalFonts?.() || Promise.resolve([]))
     .then(list => [...new Set(list.map(f => f.family))].sort((a, b) => a.localeCompare(b)), () => [])
   const family = pref('uiFont'), select = $('#font-family')
-  select.replaceChildren(new Option('Mặc định (Inter)', ''), new Option('Theo hệ thống', 'system'), ...fontFamilies.map(f => new Option(f, f)))
-  if (family && family !== 'system' && !fontFamilies.includes(family)) select.append(new Option(`${family} (không còn trên máy)`, family))
+  select.replaceChildren(new Option(tr('Mặc định (Inter)'), ''), new Option(tr('Theo hệ thống'), 'system'), ...fontFamilies.map(f => new Option(f, f)))
+  if (family && family !== 'system' && !fontFamilies.includes(family)) select.append(new Option(tr('{family} (không còn trên máy)', { family }), family))
   select.value = family
   const size = Number(pref('chatSize')) || CHAT_SIZE
   $('#font-size').value = size
@@ -4826,7 +4851,7 @@ let about = null, aboutShown = false
 api.about().then(info => {
   about = info
   $('#app-version').textContent = `Agent Chat ${info.version}`
-  $('#app-author').textContent = `Developed by ${info.author} · Giấy phép ${info.license}`
+  $('#app-author').textContent = tr('Phát triển bởi {author} · Giấy phép {license}', { author: info.author, license: info.license })
 }).catch(() => {})
 $('#about-repo').onclick = () => about?.homepage && api.openLink(null, about.homepage).catch(e => showToast(e.message.replace(/^.*?Error: /, '')))
 
@@ -4841,7 +4866,7 @@ function showAppPane(name) {
   if (name === 'font') renderFont()
   if (name === 'about' && about && !aboutShown) {
     aboutShown = true
-    $('#about-body').replaceChildren(renderMarkdown(about.changelog || 'Chưa có danh sách thay đổi.'))
+    $('#about-body').replaceChildren(renderMarkdown(about.changelog || tr('Chưa có danh sách thay đổi.')))
   }
 }
 function filterAppSettings() {
@@ -4877,7 +4902,7 @@ const THEME_ICON = {
   light: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   dark: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>'
 }
-const THEME_NAME = { system: 'Theo hệ thống', light: 'Sáng', dark: 'Tối' }
+const THEME_NAME = { system: tr('Theo hệ thống'), light: tr('Sáng'), dark: tr('Tối') }
 function showTheme(t) {
   const next = { system: 'light', light: 'dark', dark: 'system' }[t]
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
@@ -4885,7 +4910,7 @@ function showTheme(t) {
   icon.setAttribute('stroke-width', '2'); icon.setAttribute('stroke-linecap', 'round'); icon.setAttribute('stroke-linejoin', 'round')
   icon.innerHTML = THEME_ICON[t]
   $('#theme-btn').replaceChildren(icon)
-  $('#theme-btn').title = `Giao diện: ${THEME_NAME[t]} · bấm để chuyển sang ${THEME_NAME[next]}`
+  $('#theme-btn').title = tr('Giao diện: {theme} · bấm để chuyển sang {next}', { theme: THEME_NAME[t], next: THEME_NAME[next] })
   $('#theme-btn').setAttribute('aria-label', $('#theme-btn').title)
   $('#theme-btn').onclick = () => api.theme(next).then(showTheme).catch(err => showToast(err.message.replace(/^.*?Error: /, '')))
 }
@@ -4989,7 +5014,7 @@ api.on('status', (d, name, on, runId) => {
   }
   const key = runKey(d, name)
   if (on) {
-    activeRuns.set(key, { name, runId, label: 'đang khởi động…', stopping: false, phase: 'running', blockedBy: [], startedAt: Date.now(), activeAt: Date.now(), detail: null, detailTruncated: false })
+    activeRuns.set(key, { name, runId, label: tr('đang khởi động…'), stopping: false, phase: 'running', blockedBy: [], startedAt: Date.now(), activeAt: Date.now(), detail: null, detailTruncated: false })
   } else {
     const cur = activeRuns.get(key)
     if (cur && (!runId || cur.runId === runId)) activeRuns.delete(key)
@@ -5012,7 +5037,6 @@ api.on('progress', (d, name, data) => {
     if (data.blockedBy) r.blockedBy = data.blockedBy
     if (data.stopping !== undefined) r.stopping = !!data.stopping
     if (data.chain !== undefined) r.chain = data.chain
-    if (data.label === 'đang dừng…') r.stopping = true
     if (data.startedAt) Object.assign(r, { startedAt: data.startedAt, activeAt: data.activeAt })
     r.detail = data.detail !== undefined ? data.detail : null
     r.detailTruncated = !!data.detailTruncated
@@ -5090,7 +5114,7 @@ api.on('team-changed', (d, data) => {
       renderTeam()
     }
     if ($('#settings').open && !savingTeam) {
-      $('#err').replaceChildren(icon('warn', 'lead'), 'Cấu hình thành viên đã bị thay đổi bên ngoài. Hãy mở lại Cài đặt trước khi lưu.')
+      $('#err').replaceChildren(icon('warn', 'lead'), tr('Cấu hình thành viên đã bị thay đổi bên ngoài. Hãy mở lại Cài đặt trước khi lưu.'))
     }
   }
 })
@@ -5129,7 +5153,7 @@ if (typeof api !== 'undefined') {
 
 // ---- Right panel tab "Dự án": the files of the main folder, of an agent's worktree, or of one commit, with what changed.
 // Click opens the file (or its diff when it changed); right-click copies its path.
-const TREE_STATUS = { M: 'đã sửa', A: 'mới thêm', D: 'đã xoá', U: 'mới, chưa commit' }
+const TREE_STATUS = { M: tr('đã sửa'), A: tr('mới thêm'), D: tr('đã xoá'), U: tr('mới, chưa commit') }
 let asideTab = 'overview', tree = null, treeSeq = 0, treeTimer = null, treeOpen = new Set()
 const treeSourceOf = value => value.startsWith('w:') ? { workspace: value.slice(2) } : value.startsWith('c:') ? { commit: value.slice(2) } : null
 
@@ -5166,17 +5190,17 @@ async function loadTree() {
 function renderTreeSources() {
   const select = $('#tree-source'), keep = select.value, group = label => { const g = el('optgroup'); g.label = label; return g }
   const option = (value, text) => { const o = el('option', '', text); o.value = value; return o }
-  const agents = group('Nhánh của agent'), commits = group('Commit gần đây')
-  agents.append(...tree.workspaces.map(w => option(`w:${w.id}`, `@${w.agent} · chưa gộp`)))
-  const when = at => new Date(at).toDateString() === new Date().toDateString() ? hhmm(at) : new Date(at).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
+  const agents = group(tr('Nhánh của agent')), commits = group(tr('Commit gần đây'))
+  agents.append(...tree.workspaces.map(w => option(`w:${w.id}`, tr('@{agent} · chưa gộp', { agent: w.agent }))))
+  const when = at => new Date(at).toDateString() === new Date().toDateString() ? hhmm(at) : new Date(at).toLocaleDateString(i18n.locale(), { day: '2-digit', month: '2-digit' })
   commits.append(...tree.commits.map(c => option(`c:${c.sha}`, `${when(c.at)} · ${c.subject.length > 46 ? c.subject.slice(0, 45) + '…' : c.subject}`)))
-  select.replaceChildren(option('', 'Thư mục chính'), ...[agents, commits].filter(g => g.children.length))
+  select.replaceChildren(option('', tr('Thư mục chính')), ...[agents, commits].filter(g => g.children.length))
   select.value = [...select.options].some(o => o.value === keep) ? keep : ''
 }
 function treeLabel() {
-  if (tree.source?.workspace) return `nhánh @${tree.workspaces.find(w => w.id === tree.source.workspace)?.agent || 'agent'}`
+  if (tree.source?.workspace) return tr('nhánh @{agent}', { agent: tree.workspaces.find(w => w.id === tree.source.workspace)?.agent || 'agent' })
   if (tree.source?.commit) return tree.commits.find(c => c.sha === tree.source.commit)?.subject || tree.source.commit.slice(0, 7)
-  return 'chưa commit'
+  return tr('chưa commit')
 }
 function renderTree() {
   if (!tree) return
@@ -5205,14 +5229,14 @@ function renderTree() {
     for (const [name, child] of [...node.dirs].sort(([a], [b]) => byName(a, b))) {
       const open = expandAll || treeOpen.has(child.path), r = row(name, depth, 'folder', child.path)
       r.setAttribute('aria-expanded', String(open)); r.title = child.path
-      if (child.changed) { const dot = el('span', 'tdot'); dot.title = 'Có file đã đổi bên trong'; r.append(dot) }
+      if (child.changed) { const dot = el('span', 'tdot'); dot.title = tr('Có file đã đổi bên trong'); r.append(dot) }
       if (!expandAll) r.onclick = () => { treeOpen.has(child.path) ? treeOpen.delete(child.path) : treeOpen.add(child.path); renderTree() }
       frag.append(r)
       if (open) walk(child, depth + 1)
     }
     for (const f of node.files.sort((a, b) => byName(base(a), base(b)))) {
       const s = changes[f], r = row(base(f), depth, 'file', f)
-      r.title = `${f}${s ? ` · ${TREE_STATUS[s]}` : ''}\nBấm để ${treeShowsDiff(f) ? 'xem thay đổi' : 'mở'} · chuột phải để chép đường dẫn`
+      r.title = `${f}${s ? ` · ${TREE_STATUS[s]}` : ''}\n${treeShowsDiff(f) ? tr('Bấm để xem thay đổi · chuột phải để chép đường dẫn') : tr('Bấm để mở · chuột phải để chép đường dẫn')}`
       if (s) { r.dataset.s = s; const tag = el('span', 'tstat', s); tag.dataset.s = s; r.append(tag) }
       r.onclick = () => treeShowsDiff(f) ? openDiffViewer(f, tree.source, treeLabel()) : openTreeFile(f)
       frag.append(r)
@@ -5220,9 +5244,9 @@ function renderTree() {
   }
   walk(top, 0)
   const changedCount = Object.keys(changes).filter(f => !q || fold(f).includes(q)).length
-  $('#tree-summary').textContent = !tree.git ? `${files.length} file · không phải Git repo nên không có thay đổi`
-    : `${changedCount ? `${changedCount} file đã đổi` : 'Không có thay đổi'} · ${treeLabel()}${tree.truncated ? ` · chỉ hiện ${tree.files.length} file đầu` : ''}`
-  $('#tree').replaceChildren(files.length ? frag : el('div', 'none', q ? 'Không có file khớp.' : onlyChanged ? 'Không có file đã đổi.' : 'Thư mục trống.'))
+  $('#tree-summary').textContent = !tree.git ? tr('{n} file · không phải Git repo nên không có thay đổi', { n: files.length })
+    : `${changedCount ? tr('{n} file đã đổi', { n: changedCount }) : tr('Không có thay đổi')} · ${treeLabel()}${tree.truncated ? tr(' · chỉ hiện {n} file đầu', { n: tree.files.length }) : ''}`
+  $('#tree').replaceChildren(files.length ? frag : el('div', 'none', q ? tr('Không có file khớp.') : onlyChanged ? tr('Không có file đã đổi.') : tr('Thư mục trống.')))
 }
 // a modified, deleted or committed file opens as a diff; a new or unchanged one opens as itself
 const treeShowsDiff = f => !!tree.source?.commit || ['M', 'D'].includes(tree.changes[f])
@@ -5230,11 +5254,11 @@ const openTreeFile = f => openFileViewer(fileHref(f), null, tree.source?.workspa
 
 function openTreeMenu(e, rowEl, target, isFolder) {
   const menu = $('#tree-menu'), absolute = tree.base + (tree.base.includes('\\') ? '\\' + target.replaceAll('/', '\\') : '/' + target)
-  const copy = text => navigator.clipboard.writeText(text).then(() => showToast(`Đã chép: ${text}`), () => showToast('Không chép được vào clipboard'))
+  const copy = text => navigator.clipboard.writeText(text).then(() => showToast(tr('Đã chép: {text}', { text })), () => showToast(tr('Không chép được vào clipboard')))
   const items = [
-    ...(!isFolder && tree.changes[target] !== 'D' ? [['Mở file', () => openTreeFile(target)]] : []),
-    ...(!isFolder && (tree.changes[target] || tree.source?.commit) ? [['Xem thay đổi', () => openDiffViewer(target, tree.source, treeLabel())]] : []),
-    null, ['Chép đường dẫn tương đối', () => copy(target)], ['Chép đường dẫn đầy đủ', () => copy(absolute)],
+    ...(!isFolder && tree.changes[target] !== 'D' ? [[tr('Mở file'), () => openTreeFile(target)]] : []),
+    ...(!isFolder && (tree.changes[target] || tree.source?.commit) ? [[tr('Xem thay đổi'), () => openDiffViewer(target, tree.source, treeLabel())]] : []),
+    null, [tr('Chép đường dẫn tương đối'), () => copy(target)], [tr('Chép đường dẫn đầy đủ'), () => copy(absolute)],
   ].filter((item, i, all) => item || (i > 0 && all[i - 1]))
   menu.replaceChildren(...items.map(item => {
     if (!item) return el('hr')
@@ -5273,23 +5297,23 @@ async function openDiffViewer(file, source, label) {
   currentDiff = { file, source, label }
   const stored = loadViewerLayout()
   viewerNormalLayout = { width: stored.width, height: stored.height }; viewerIsMaximized = stored.maximized; applyViewerLayout()
-  $('#viewer-title').textContent = `${base(file)} · thay đổi`
+  $('#viewer-title').textContent = tr('{file} · thay đổi', { file: base(file) })
   $('#viewer-path').textContent = `${file} · ${label}`
   for (const id of ['#viewer-img-controls', '#viewer-html-tabs', '#viewer-html-external', '#viewer-notice', '#viewer-external']) $(id).style.display = 'none'
-  bodyEl.replaceChildren(el('div', 'none', 'Đang tải…'))
+  bodyEl.replaceChildren(el('div', 'none', tr('Đang tải…')))
   if (!dialog.open) dialog.showModal()
   $('#viewer-close').focus()
   const res = await api.fileDiff(dir, source, file)
   if (thisGen !== viewerGen) return
   if (!res.ok) return bodyEl.replaceChildren(el('div', 'viewer-error', res.error.message))
-  if (!res.diff.trim()) return bodyEl.replaceChildren(el('div', 'none', 'Không có thay đổi.'))
+  if (!res.diff.trim()) return bodyEl.replaceChildren(el('div', 'none', tr('Không có thay đổi.')))
   const pre = el('pre', 'viewer-text diff')
   for (const line of res.diff.replace(/\n$/, '').split('\n')) {
     const cls = /^(diff |index |--- |\+\+\+ |new file|deleted file|similarity|rename |Binary )/.test(line) ? 'd-meta'
       : line.startsWith('@@') ? 'd-hunk' : line.startsWith('+') ? 'd-add' : line.startsWith('-') ? 'd-del' : ''
     pre.append(el('span', cls, line || ' '))
   }
-  bodyEl.replaceChildren(pre, ...(res.truncated ? [el('div', 'none', 'Diff quá dài, chỉ hiện 512 KB đầu.')] : []))
+  bodyEl.replaceChildren(pre, ...(res.truncated ? [el('div', 'none', tr('Diff quá dài, chỉ hiện 512 KB đầu.'))] : []))
 }
 
 $('#aside-tab-overview').onclick = () => showAsideTab('overview')

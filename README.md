@@ -28,7 +28,8 @@ without a mention goes to the PM. The PM splits the work into tasks, the other a
 own Git worktrees and report back in the chat. Anything that needs your decision lands in one **Needs you** inbox.
 
 > [!NOTE]
-> The app's interface is currently in Vietnamese.
+> The interface is available in Vietnamese, English and Japanese. Pick one in **Settings › Language**; on first launch
+> the app follows the operating system's language.
 
 ## Contents
 
@@ -80,8 +81,8 @@ own Git worktrees and report back in the chat. Anything that needs your decision
   recent commit, marks changed files (M, A, D, U), opens their diff, and copies a file's relative or full path.
 
 **Settings**
-- A searchable settings window: interface font and message size, where each CLI is installed, and whether each
-  account is signed in.
+- A searchable settings window: interface language (Vietnamese, English, Japanese), interface font and message size,
+  where each CLI is installed, and whether each account is signed in.
 
 ## How it works
 
@@ -206,6 +207,7 @@ npm run check    # full test suite
 | `main.js` | Electron main process: jobs and locks, worktrees and the merge queue, IPC |
 | `core.js` | Pure logic: CLI adapters, prompts, the log index, tasks, scopes, file access |
 | `preload.js` | The `api` bridge exposed to the renderer |
+| `i18n.js`, `locales/` | Interface language: `tr()` looks up the Vietnamese source text in `locales/en.js` and `locales/ja.js` |
 | `renderer.js`, `index.html` | The user interface |
 | `check.js` | Tests. They use fake `claude`, `codex` and `agy` binaries and real Git repositories in temp folders. |
 
@@ -224,7 +226,8 @@ Builds are not code-signed. On macOS, right-click › Open the first time. On Wi
 
 To release:
 1. Bump the version: `npm version minor --no-git-tag-version` for features, or `patch` for fixes.
-2. Add a section for that version to [`CHANGELOG.md`](CHANGELOG.md). `npm run check` fails if it is missing.
+2. Add a section for that version to [`CHANGELOG.md`](CHANGELOG.md), [`CHANGELOG.en.md`](CHANGELOG.en.md) and
+   [`CHANGELOG.ja.md`](CHANGELOG.ja.md). `npm run check` fails if it is missing.
 3. Build. The app shows the changelog under Settings › About.
 
 The app icon is `build/icon.svg`. After editing it, render `build/icon.png` at 1024px and electron-builder will make
@@ -241,7 +244,10 @@ Issues and pull requests are welcome. Before you open a pull request:
 
 - run `npm run check` and make sure it passes;
 - add a check for the behaviour you changed;
-- add an entry to `CHANGELOG.md` if users will notice the change.
+- add an entry to `CHANGELOG.md` (and its English and Japanese versions) if users will notice the change;
+- write new interface text in Vietnamese inside `tr('…')` and add its English and Japanese translations to
+  `locales/en.js` and `locales/ja.js`. `npm run check` fails on any Vietnamese text outside `tr()` and on any missing
+  translation.
 
 Planned work is tracked in [`reports/roadmap.md`](reports/roadmap.md).
 

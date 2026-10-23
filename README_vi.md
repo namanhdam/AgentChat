@@ -27,6 +27,10 @@ có một box chat. Bạn nhắn cho nhóm như trong một nhóm chat bình th�
 nhận. PM chia việc thành task, các agent khác nhận việc, sửa code trong worktree Git riêng rồi báo lại trong chat. Việc gì
 cần bạn quyết sẽ hiện ở một chỗ duy nhất là mục **Cần bạn**.
 
+> [!NOTE]
+> Giao diện có tiếng Việt, tiếng Anh và tiếng Nhật. Chọn trong **Cài đặt › Ngôn ngữ**; lần đầu mở, app chọn theo ngôn
+> ngữ của hệ điều hành.
+
 ## Mục lục
 
 - [Tính năng](#tính-năng)
@@ -78,7 +82,8 @@ cần bạn quyết sẽ hiện ở một chỗ duy nhất là mục **Cần b�
   đây. File đã đổi có nhãn M, A, D, U; bấm để xem diff, chuột phải để chép đường dẫn tương đối hoặc đầy đủ.
 
 **Cài đặt**
-- Cửa sổ cài đặt có ô tìm kiếm: font giao diện và cỡ chữ tin nhắn, vị trí cài từng CLI, tài khoản nào đã đăng nhập.
+- Cửa sổ cài đặt có ô tìm kiếm: ngôn ngữ giao diện (tiếng Việt, tiếng Anh, tiếng Nhật), font giao diện và cỡ chữ tin
+  nhắn, vị trí cài từng CLI, tài khoản nào đã đăng nhập.
 
 ## Cách hoạt động
 
@@ -200,6 +205,7 @@ npm run check    # toàn bộ bộ kiểm tra
 | `main.js` | Tiến trình chính của Electron: lượt chạy và khóa, worktree và hàng chờ merge, IPC |
 | `core.js` | Logic thuần: adapter cho từng CLI, prompt, chỉ mục log, task, phạm vi, đọc file |
 | `preload.js` | Cầu nối `api` cho renderer |
+| `i18n.js`, `locales/` | Ngôn ngữ giao diện: `tr()` tra câu tiếng Việt gốc trong `locales/en.js` và `locales/ja.js` |
 | `renderer.js`, `index.html` | Giao diện |
 | `check.js` | Bộ kiểm tra. Dùng `claude`, `codex`, `agy` giả và repo Git thật trong thư mục tạm. |
 
@@ -218,7 +224,8 @@ Bản build chưa ký số. Trên macOS, lần đầu mở bằng chuột phải
 
 Mỗi lần phát hành:
 1. Nâng phiên bản: `npm version minor --no-git-tag-version` cho tính năng mới, `patch` cho bản sửa lỗi.
-2. Thêm mục cho phiên bản đó vào [`CHANGELOG.md`](CHANGELOG.md). `npm run check` báo lỗi nếu thiếu.
+2. Thêm mục cho phiên bản đó vào [`CHANGELOG.md`](CHANGELOG.md), [`CHANGELOG.en.md`](CHANGELOG.en.md) và
+   [`CHANGELOG.ja.md`](CHANGELOG.ja.md). `npm run check` báo lỗi nếu thiếu.
 3. Build. Trong app, danh sách thay đổi nằm ở Cài đặt › Giới thiệu.
 
 Icon của app là `build/icon.svg`. Sửa xong thì render lại `build/icon.png` cỡ 1024px; electron-builder tự tạo `.icns` và
@@ -235,7 +242,9 @@ Rất hoan nghênh issue và pull request. Trước khi mở pull request:
 
 - chạy `npm run check` và bảo đảm bộ kiểm tra đạt;
 - thêm ca kiểm tra cho hành vi bạn thay đổi;
-- thêm mục vào `CHANGELOG.md` nếu người dùng sẽ nhận ra thay đổi đó.
+- thêm mục vào `CHANGELOG.md` (và bản tiếng Anh, tiếng Nhật) nếu người dùng sẽ nhận ra thay đổi đó;
+- viết chữ mới trên giao diện bằng tiếng Việt trong `tr('…')` và thêm bản dịch tiếng Anh, tiếng Nhật vào `locales/en.js`,
+  `locales/ja.js`. `npm run check` báo lỗi nếu còn chữ tiếng Việt nằm ngoài `tr()` hoặc thiếu bản dịch.
 
 Các việc dự định làm được theo dõi ở [`reports/roadmap.md`](reports/roadmap.md).
 

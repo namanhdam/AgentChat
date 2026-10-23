@@ -3,6 +3,7 @@ const assert = require('assert'), fs = require('fs'), os = require('os'), path =
 const core = require('./core')
 if (process.argv[2] === '--electron') return void electronChecks()
 if (process.argv[2] === '--main') return void mainHarness().then(() => process.exit(0), e => { console.error(e); process.exit(1) })
+if (process.argv[2] === '--i18n') { const problems = i18nProblems(); console.log(problems.join('\n') || 'ok (i18n)'); process.exitCode = problems.length ? 1 : 0; return }
 
 const t = [{ name: 'dev' }, { name: 'dev-fe' }, { name: 'pm' }]
 assert.deepStrictEqual(core.mentions('@dev-fe làm UI', t, 'pm').map(a => a.name), ['dev-fe'])
@@ -191,7 +192,25 @@ assert.strictEqual(require('./package.json').dependencies['markdown-it'], '15.0.
 const page = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8'), rendererJs = fs.readFileSync(path.join(__dirname, 'renderer.js'), 'utf8')
 assert.ok(page.includes('node_modules/markdown-it/dist/browser/markdown-it.umd.min.js') && /markdownit\(\{ html: false/.test(rendererJs))
 // a release bumps package.json and says what changed: the Giới thiệu dialog shows this file
-assert.ok(fs.readFileSync(path.join(__dirname, 'CHANGELOG.md'), 'utf8').includes(`## ${require('./package.json').version} · `), 'CHANGELOG.md thiếu mục cho phiên bản hiện tại')
+for (const file of ['CHANGELOG.md', 'CHANGELOG.en.md', 'CHANGELOG.ja.md']) // Settings › About shows the one for the interface language
+  assert.ok(fs.readFileSync(path.join(__dirname, file), 'utf8').includes(`## ${require('./package.json').version} · `), `${file} thiếu mục cho phiên bản hiện tại`)
+{
+  const problems = i18nProblems() // `node check.js --i18n` lists them
+  assert.deepStrictEqual(problems.slice(0, 20), [], `giao diện còn ${problems.length} chỗ chưa dịch sang tiếng Anh/Nhật`)
+  const i18n = require('./i18n')
+  assert.deepStrictEqual(i18n.LANGS, ['vi', 'en', 'ja'])
+  assert.deepStrictEqual([i18n.pick(['ja-JP', 'en-US']), i18n.pick(['fr-FR', 'vi-VN']), i18n.pick(['de']), i18n.pick([])], ['ja', 'vi', 'en', 'en'])
+  i18n.setLang('en')
+  assert.strictEqual(i18n.t('x {a} {a} {b}', { a: 1 }), 'x 1 1 {b}') // a missing key falls back to the Vietnamese text
+  i18n.dicts.en['{n} cập nhật'] = ['{n} update', '{n} updates']
+  assert.deepStrictEqual([i18n.t('{n} cập nhật', { n: 1 }), i18n.t('{n} cập nhật', { n: 3 })], ['1 update', '3 updates'])
+  delete i18n.dicts.en['{n} cập nhật']
+  i18n.setLang('vi')
+  for (const f of ['i18n.js', 'locales/en.js', 'locales/ja.js', 'CHANGELOG.en.md', 'CHANGELOG.ja.md'])
+    assert.ok(require('./package.json').build.files.includes(f) || require('./package.json').build.files.includes('locales/**'), `${f} thiếu trong build.files`)
+  assert.ok(/locales\/en\.js[\s\S]*locales\/ja\.js[\s\S]*i18n\.js[\s\S]*renderer\.js/.test(page.slice(page.indexOf('<body'))), 'index.html phải nạp từ điển và i18n.js trước renderer.js')
+  console.log('ok (i18n: vi, en, ja)')
+}
 const html = require('markdown-it')({ html: false, linkify: false, breaks: true }).disable('image')
   .render('**đạt**\n\n- a\n\n```\n<script>alert(1)</script>\n```\n\n<img src=x onerror=alert(1)>\n\n[x](javascript:alert(1))\n\n| a | b |\n|---|---|\n| 1 | 2 |')
 assert.ok(html.includes('<strong>đạt</strong>') && html.includes('<li>a</li>') && html.includes('<table>'))
@@ -1035,7 +1054,7 @@ async function rendererChecks() {
     classList: { toggle() {}, add() {}, remove() {}, contains() { return false } }, setAttribute() {}, showModal() { this.open = true } })
   const $ = id => { if (!nodes.has(id)) nodes.set(id, el('div')); return nodes.get(id) }
   const session = { id: 'saved-session', cli: 'codex', workspaceId: 'workspace', seen: 42, at: '2026-09-27T00:00:00Z' }
-  const context = vm.createContext({ $, el, structuredClone, dir: '/box', openSeq: 1, openingDir: null, notices, document: { activeElement: null },
+  const context = vm.createContext({ ...i18nGlobals(), $, el, structuredClone, dir: '/box', openSeq: 1, openingDir: null, notices, document: { activeElement: null },
     team: [{ name: 'dev', cli: 'codex', avatar: { gender: 'male', color: '#abc' } }], currentTeamRevision: 'team-r1',
     currentSettings: { worktreesEnabled: true }, currentSettingsRevision: null,
     worktreeState: { enabled: true, agents: [{ name: 'dev', workspaceId: 'workspace' }] }, currentPopoverAgent: null,
@@ -1151,7 +1170,7 @@ async function rendererFileChecks() {
     getAttribute(k) { return this.attrs[k] }, focus() {}, showModal() { this.open = true }, close() { this.open = false } })
   const $ = id => { if (!nodes.has(id)) nodes.set(id, el('div')); return nodes.get(id) }
   const workspace = { id: 'dev-tree', branch: 'agents/dev' }, content = '<script>alert(1)</script>', name = 'việt #%.html'
-  const ctx = vm.createContext({ $, el, dir: '/p', team: [{ name: 'pm' }], base: p => p.split('/').pop(), NodeFilter: { SHOW_TEXT: 4 },
+  const ctx = vm.createContext({ ...i18nGlobals(), $, el, dir: '/p', team: [{ name: 'pm' }], base: p => p.split('/').pop(), NodeFilter: { SHOW_TEXT: 4 },
     window: { markdownit: require('markdown-it') }, document: { activeElement: null, createTextNode: text => el('text', '', text),
       createDocumentFragment: () => el('frag'), createTreeWalker: root => { let i = 0; return { nextNode: () => root.textNodes[i++] } } },
     api: { readProjectFile: async (...args) => { opened.push(args); return { ok: true, workspace, file: { path: name, name, format: 'text', content } } },
@@ -1197,7 +1216,7 @@ async function rendererS9Checks() {
     append(...c) { this.children.push(...c) }, replaceChildren(...c) { this.children = c }, setAttribute(k, v) { this.attrs[k] = v } })
   const $ = id => { if (!nodes.has(id)) nodes.set(id, el('div')); return nodes.get(id) }
   let list = []
-  const ctx = vm.createContext({ $, el, base: p => p.split(/[\\/]/).pop(), fileIcon: () => el('svg'), openFileViewer: f => opened.push(f),
+  const ctx = vm.createContext({ ...i18nGlobals(), $, el, base: p => p.split(/[\\/]/).pop(), fileIcon: () => el('svg'), openFileViewer: f => opened.push(f),
     document: { createDocumentFragment: () => el('frag') }, dir: '/p', box: '.chat', openSeq: 1, api: { files: async () => list },
     localStorage: { getItem: k => store.has(k) ? store.get(k) : null, setItem: (k, v) => store.set(k, v) } })
   vm.runInContext(part('const fileHref', 'let currentViewerHref'), ctx)
@@ -1333,7 +1352,7 @@ async function rendererS10Checks() {
   const listeners = new Map()
   const fakeBlobUrl = () => `blob:agent-preview/${++blobCounter}`
 
-  const ctx = vm.createContext({
+  const ctx = vm.createContext({ ...i18nGlobals(),
     $, el, dir: '/test-dir', base: p => p.split(/[\\/]/).pop(),
     document: { activeElement: null, getElementById: id => $(id) },
     window: { innerWidth: 1200, innerHeight: 800, addEventListener() {} },
@@ -1603,7 +1622,7 @@ async function rendererS11Checks() {
   }
 
   const viewerCalls = []
-  const ctx = vm.createContext({
+  const ctx = vm.createContext({ ...i18nGlobals(),
     $, el: (tag, cls = '', txt = '') => {
       const node = el(tag, cls, txt)
       patchAppend(node)
@@ -1772,7 +1791,7 @@ async function rendererS12Checks(recovered = null) {
   let chainStateResponses = new Map()
   let renderNeedsCalls = 0
 
-  const ctx = vm.createContext({
+  const ctx = vm.createContext({ ...i18nGlobals(),
     $,
     el: (tag, cls = '', txt = '') => {
       const node = el(tag, cls, txt)
@@ -2100,17 +2119,93 @@ function electronChecks() {
   const { spawnSync } = require('child_process'), tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-e2e-')), appDir = path.join(tmp, 'app')
   fs.mkdirSync(appDir) // loadFile('index.html') resolves against the entry's folder: mirror the project there with symlinks
   for (const f of fs.readdirSync(__dirname)) fs.symlinkSync(path.join(__dirname, f), path.join(appDir, f))
-  fs.writeFileSync(path.join(appDir, 'qa-entry.js'), `(${qaElectronEntry})()`)
-  // the Electron binary itself (not the .bin wrapper): on timeout the real process is killed, never left holding the pipes
-  const r = spawnSync(require('electron'), [path.join(appDir, 'qa-entry.js')], { encoding: 'utf8', timeout: 150000, killSignal: 'SIGKILL',
-    env: { ...process.env, QA_MAIN: path.join(appDir, 'main.js'), SHELL: '/nonexistent' } })
+  let passed = true
+  for (const entry of [qaElectronEntry, qaLanguageEntry]) {
+    fs.writeFileSync(path.join(appDir, 'qa-entry.js'), `(${entry})()`)
+    // the Electron binary itself (not the .bin wrapper): on timeout the real process is killed, never left holding the pipes
+    const r = spawnSync(require('electron'), [path.join(appDir, 'qa-entry.js')], { encoding: 'utf8', timeout: 150000, killSignal: 'SIGKILL',
+      env: { ...process.env, QA_MAIN: path.join(appDir, 'main.js'), SHELL: '/nonexistent' } })
+    const line = String(r.stdout + r.stderr).split('\n').find(l => l.startsWith('E2E '))
+    if (!line) { console.error(JSON.stringify({ status: r.status, signal: r.signal, error: r.error?.message }), String(r.stdout + r.stderr).slice(-3000)); process.exit(1) }
+    const out = JSON.parse(line.slice(4))
+    console.log(`Electron ${out.electron || '?'}${out.timeout ? ' — HẾT GIỜ' : ''}`)
+    for (const x of out.results) console.log(`${x.ok ? 'ok  ' : 'FAIL'} ${x.name}${x.ok && !process.env.QA_VERBOSE ? '' : ' — ' + x.info}`)
+    passed &&= !out.timeout && out.results.length > 0 && out.results.every(x => x.ok)
+  }
   fs.rmSync(tmp, { recursive: true, force: true })
-  const line = String(r.stdout + r.stderr).split('\n').find(l => l.startsWith('E2E '))
-  if (!line) { console.error(JSON.stringify({ status: r.status, signal: r.signal, error: r.error?.message }), String(r.stdout + r.stderr).slice(-3000)); process.exit(1) }
-  const out = JSON.parse(line.slice(4))
-  console.log(`Electron ${out.electron || '?'}${out.timeout ? ' — HẾT GIỜ' : ''}`)
-  for (const x of out.results) console.log(`${x.ok ? 'ok  ' : 'FAIL'} ${x.name}${x.ok && !process.env.QA_VERBOSE ? '' : ' — ' + x.info}`)
-  process.exit(!out.timeout && out.results.length && out.results.every(x => x.ok) ? 0 : 1)
+  process.exit(passed ? 0 : 1)
+}
+
+// English and Japanese on the real app: every text and tooltip on screen, in each dialog, has no Vietnamese left
+function qaLanguageEntry() { // runs inside Electron, serialized by electronChecks
+  const { app, BrowserWindow, Menu } = require('electron')
+  const fs = require('fs'), path = require('path'), os = require('os')
+  const ud = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-lang-ud-')); app.setPath('userData', ud)
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'qa-lang-root-')))
+  const results = [], check = (name, ok, info = '') => results.push({ name, ok: !!ok, info })
+  const VI = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i
+  const PLAIN = /\b(xem|tin|theo|trong|khi|cho|sang|nhanh|ghi|hay|voi|nay|lai|tim|cua|mot)\b/i
+  const vietnamese = v => VI.test(v.replace(/Tiếng Việt/g, '')) || PLAIN.test(v)
+  setTimeout(() => { console.log('E2E ' + JSON.stringify({ timeout: true, results })); app.exit(2) }, 120000)
+  ;(async () => {
+    fs.writeFileSync(path.join(root, 'notes.md'), '# Notes')
+    fs.writeFileSync(path.join(ud, 'projects.json'), JSON.stringify([root]))
+    fs.writeFileSync(path.join(ud, 'language.json'), JSON.stringify('en'))
+    // no real CLI may run here: a turn must fail to start, so main/core post their error into the chat
+    process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-lang-home-')); process.env.PATH = '/usr/bin:/bin'
+    require(process.env.QA_MAIN)
+    await app.whenReady()
+    const core = require(path.join(path.dirname(process.env.QA_MAIN), 'core.js'))
+    let win; while (!(win = BrowserWindow.getAllWindows()[0])) await new Promise(r => setTimeout(r, 50))
+    const loaded = () => new Promise(r => win.webContents.isLoading() ? win.webContents.once('did-finish-load', r) : r())
+    await loaded()
+    const js = code => win.webContents.executeJavaScript(code, true)
+    const sleep = ms => new Promise(r => setTimeout(r, ms))
+    const scan = () => js(`(() => {
+      const VI = ${VI}, PLAIN = ${PLAIN}, bad = v => VI.test(v.replace(/Tiếng Việt/g, '')) || PLAIN.test(v), hits = new Set()
+      const where = el => el.id ? '#' + el.id : el.closest('[id]') ? '#' + el.closest('[id]').id + ' ' + el.tagName.toLowerCase() : el.tagName.toLowerCase()
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+      for (let n; (n = walker.nextNode());) { if (n.parentElement.closest('script, style')) continue; const v = n.nodeValue.trim(); if (v && bad(v)) hits.add(where(n.parentElement) + ': ' + v.slice(0, 90)) }
+      for (const el of document.querySelectorAll('*')) for (const a of ['title', 'aria-label', 'placeholder', 'alt']) {
+        const v = el.getAttribute(a); if (v && bad(v)) hits.add(where(el) + ' [' + a + ']: ' + v.slice(0, 90)) }
+      return [...hits]
+    })()`)
+    const menuLabels = items => items.flatMap(i => [i.label || '', ...(i.submenu ? menuLabels(i.submenu.items) : [])])
+    for (const lang of ['en', 'ja']) {
+      if (lang !== 'en') {
+        await js(`document.querySelector('#input').value = 'draft 123'`)
+        const reloaded = new Promise(r => win.webContents.once('did-finish-load', r)) // Settings › Language reloads the page
+        await js(`(() => { openAppSettings('language'); const s = document.querySelector('#ui-language'); s.value = '${lang}'; s.dispatchEvent(new Event('change')) })()`)
+        const ok = await Promise.race([reloaded.then(() => true), sleep(8000).then(() => false)])
+        if (!ok) check(`${lang}: đổi ngôn ngữ tải lại trang`, false, JSON.stringify(await js(`[document.querySelector('#ui-language').value, api.language(), location.href, [...document.querySelectorAll('dialog[open]')].map(d => d.id)]`).catch(e => String(e))))
+        await sleep(300)
+      }
+      try { core.trustConfig(root, core.configTrust(root).texts) } catch {}
+      await js(`openProject(${JSON.stringify(root)})`); await sleep(800)
+      const state = await js(`[document.documentElement.lang, api.language(), document.querySelector('#ui-language')?.value, document.querySelector('#input').value]`)
+      check(`${lang}: app mở bằng ngôn ngữ đã chọn`, state[0] === lang && state[1] === lang && state[2] === lang, JSON.stringify(state))
+      if (lang !== 'en') check(`${lang}: đổi ngôn ngữ giữ nội dung ô soạn`, state[3] === 'draft 123', JSON.stringify(state))
+      // a turn that can't start (no CLI here) posts its error from main/core into the chat
+      await js(`api.send(${JSON.stringify(root)}, 'hello')`); await sleep(1500)
+      const hits = new Set(await scan())
+      const look = async (open, close) => { await js(open); await sleep(500); for (const h of await scan()) hits.add(h); if (close) { await js(close); await sleep(200) } }
+      await look(`$('#gear').onclick()`, `document.querySelectorAll('dialog[open]').forEach(d => d.close())`)
+      for (const pane of ['font', 'agent', 'mcp', 'skill', 'language', 'about']) await look(`openAppSettings('${pane}')`)
+      await js(`document.querySelectorAll('dialog[open]').forEach(d => d.close())`)
+      for (const action of ['switch', 'timeline', 'search']) {
+        win.webContents.send('menu', action); await sleep(600); for (const h of await scan()) hits.add(h)
+        await js(`document.querySelectorAll('dialog[open]').forEach(d => d.close())`); await sleep(200)
+      }
+      await look(`openFileViewer('notes.md')`, `closeViewer()`)
+      check(`${lang}: không còn chữ tiếng Việt trên màn hình, hộp thoại và tooltip`, !hits.size, [...hits].slice(0, 15).join(' | '))
+      const labels = menuLabels(Menu.getApplicationMenu()?.items || []).filter(vietnamese)
+      check(`${lang}: menu app không còn tiếng Việt`, !labels.length, labels.join(', '))
+      const team = JSON.parse(fs.readFileSync(path.join(root, '.chat', 'agents.json'), 'utf8')).map(a => a.role).filter(vietnamese)
+      if (lang === 'en') check('en: nhóm mặc định của dự án mới có vai trò tiếng Anh', !team.length, team.join(' | '))
+    }
+    console.log('E2E ' + JSON.stringify({ electron: process.versions.electron, results }))
+    app.exit(results.every(r => r.ok) ? 0 : 1)
+  })().catch(e => { check('không lỗi', false, String(e?.stack || e)); console.log('E2E ' + JSON.stringify({ results })); app.exit(1) })
 }
 
 function qaElectronEntry() { // runs inside Electron, serialized by electronChecks
@@ -2157,6 +2252,7 @@ function qaElectronEntry() { // runs inside Electron, serialized by electronChec
       { id: 'T2', title: 'Task thật nghiệm thu tay', assignee: 'qa', spec: 'reports/s.md', createdAt: tAt, updatedAt: tAt, acceptance: 'manual' }] }))
     fs.writeFileSync(path.join(ud, 'window.json'), JSON.stringify({ x: 40, y: 40, width: 1200, height: 800, maximized: true })) // T57: restore maximized
     fs.writeFileSync(path.join(ud, 'projects.json'), JSON.stringify([root]))
+    fs.writeFileSync(path.join(ud, 'language.json'), JSON.stringify('vi')) // these checks read Vietnamese labels
     require(MAIN)
     await app.whenReady()
     const core = require(path.join(path.dirname(MAIN), 'core.js'))
@@ -2309,7 +2405,7 @@ async function rendererT56Checks() {
   const $ = id => { if (!nodes.has(id)) { const n = el('div'); n.parentElement = el('div'); nodes.set(id, n) } return nodes.get(id) }
   const pending = []
   const later = () => new Promise(resolve => pending.push(resolve))
-  const ctx = vm.createContext({ $, el, dir: '/a', box: '.chat', openSeq: 1, document: { activeElement: null }, showToast() {}, openFileViewer() {},
+  const ctx = vm.createContext({ ...i18nGlobals(), $, el, dir: '/a', box: '.chat', openSeq: 1, document: { activeElement: null }, showToast() {}, openFileViewer() {},
     getAgentAvatar: () => null, hhmm: () => '12:00', navigator: { clipboard: { writeText: async () => {} } },
     api: { tasks: () => later() } })
   vm.runInContext(part('const STATUS_MAP', '// ---- "Cần bạn"'), ctx)
@@ -2332,7 +2428,7 @@ async function rendererT52Checks() {
     const preloadLike = { // Both preload APIs subscribe to the same channel.
       ...(mode !== 'generic' && { onChainChanged: subscribe }),
       ...(mode !== 'dedicated' && { on: (name, fn) => name === 'chain-changed' ? subscribe(fn) : () => {} }) }
-    const ctx = vm.createContext({ api: preloadLike, dir: '/box', openingDir: null, pendingEvents: [], activeChainUnbinds: unbinds, applyChainViewUpdate: st => applied.push(st) })
+    const ctx = vm.createContext({ ...i18nGlobals(), api: preloadLike, dir: '/box', openingDir: null, pendingEvents: [], activeChainUnbinds: unbinds, applyChainViewUpdate: st => applied.push(st) })
     vm.runInContext(ui.slice(from, to), ctx)
     assert.strictEqual(channel.size, 1, `${mode}: chỉ một listener chain-changed`)
     for (const h of channel) h('/another-project', { stopId: 'other', revision: '1' })
@@ -2415,7 +2511,7 @@ async function mainHarness() {
       }
       return createdWin
     },
-    ipcMain: { handle: (name, fn) => { handlers[name] = fn } }, shell: { openPath: async p => { openedPaths.push(p); return '' } },
+    ipcMain: { handle: (name, fn) => { handlers[name] = fn }, on: (name, fn) => { handlers[name] = fn } }, shell: { openPath: async p => { openedPaths.push(p); return '' } },
     Menu: { setApplicationMenu() {}, buildFromTemplate: t => t }, nativeTheme: mockNativeTheme,
     screen: { getAllDisplays: () => [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }] },
     dialog: { showMessageBox: async () => { dialogs++; await onDialog?.(); return { response: dialogAnswer, checkboxChecked: true } },
@@ -3829,7 +3925,7 @@ function appSettingsChecks() {
   const navs = Object.fromEntries(Object.entries(sections).map(([name, s]) => [name, { textContent: s.label, hidden: false, active: false,
     classList: { toggle(c, on) { navs[name].active = on } } }]))
   const search = { value: '' }, empty = { hidden: true }, scans = []
-  const ctx = { fold: s => s.normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/gi, 'd').toLowerCase(), cliState: null, scanClis: () => scans.push(1),
+  const ctx = { ...i18nGlobals(), fold: s => s.normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/gi, 'd').toLowerCase(), cliState: null, scanClis: () => scans.push(1),
     renderFont() {}, about: null, aboutShown: false, $: s => s === '#app-settings-search' ? search : empty,
     document: { querySelectorAll: () => panes, querySelector: s => navs[/data-pane="(\w+)"/.exec(s)[1]] } }
   vm.createContext(ctx); vm.runInContext(code + '\n;this.filter = filterAppSettings; this.pane = () => appPane', ctx)
@@ -4026,4 +4122,113 @@ console.log('ok (windows args)')
     assert.ok((await core.logPage(d)).messages[0].retracted)
     console.log('ok (retract)')
   })().catch(e => { console.error(e); process.exit(1) })
+}
+
+// ---- interface language: nothing Vietnamese reaches an English or Japanese screen
+// Every string literal with Vietnamese in main/core/renderer must be a tr('…') key (or a N_('…') key passed to tr later),
+// or sit on a line marked `i18n-ignore` / in an `i18n-off` … `i18n-on` region (text for the agents, not for the screen).
+// Every visible text and attribute in index.html must be in the dictionaries, unless it reads the same in every language.
+function i18nGlobals() { const i18n = require('./i18n'); return { i18n, tr: i18n.t } }
+function jsStrings(src) {
+  const toks = [], KW = /^(return|typeof|case|do|else|in|of|new|delete|void|throw|yield|await|instanceof)$/
+  const frames = [] // open template literals: braces seen inside the current ${…}
+  let i = 0, line = 1, off = false
+  const ignored = new Set()
+  const sig = () => toks[toks.length - 1]
+  const regexOk = () => { const p = sig(); return !p || (p.type === 'punct' && !/[)\]]/.test(p.v)) || (p.type === 'id' && KW.test(p.v)) }
+  const readTemplate = start => { // from just after ` or }, up to the closing ` or the next ${
+    let s = '', l = line
+    while (i < src.length) {
+      const c = src[i]
+      if (c === '\\') { s += src.slice(i, i + 2); if (src[i + 1] === '\n') line++; i += 2; continue }
+      if (c === '`') { i++; toks.push({ type: 'tpl', v: s, line: l, off, start, end: true }); return }
+      if (c === '$' && src[i + 1] === '{') { i += 2; toks.push({ type: 'tpl', v: s, line: l, off, start, end: false }); frames.push(0); return }
+      if (c === '\n') line++
+      s += c; i++
+    }
+  }
+  while (i < src.length) {
+    const c = src[i]
+    if (c === '\n') { line++; i++; continue }
+    if (/\s/.test(c)) { i++; continue }
+    if (c === '/' && src[i + 1] === '/') {
+      const e = src.indexOf('\n', i), text = src.slice(i, e < 0 ? src.length : e)
+      if (text.includes('i18n-off')) off = true
+      if (text.includes('i18n-on')) off = false
+      if (text.includes('i18n-ignore')) ignored.add(line)
+      i = e < 0 ? src.length : e; continue
+    }
+    if (c === '/' && src[i + 1] === '*') { const e = src.indexOf('*/', i + 2); for (const ch of src.slice(i, e)) if (ch === '\n') line++; i = e + 2; continue }
+    if (c === "'" || c === '"') {
+      let j = i + 1
+      while (src[j] !== c) j += src[j] === '\\' ? 2 : 1
+      toks.push({ type: 'str', v: Function(`return ${src.slice(i, j + 1)}`)(), line, off }); i = j + 1; continue
+    }
+    if (c === '`') { i++; readTemplate(true); continue }
+    if (c === '}' && frames.length && frames[frames.length - 1] === 0) { frames.pop(); i++; readTemplate(false); continue }
+    if (c === '{' && frames.length) frames[frames.length - 1]++
+    if (c === '}' && frames.length) frames[frames.length - 1]--
+    if (c === '/' && regexOk()) {
+      let j = i + 1, cls = false
+      while (j < src.length && (cls || src[j] !== '/')) { if (src[j] === '\\') j++; else if (src[j] === '[') cls = true; else if (src[j] === ']') cls = false; j++ }
+      j++; while (/[a-z]/.test(src[j])) j++
+      toks.push({ type: 'regex', v: src.slice(i, j), line, off }); i = j; continue
+    }
+    const m = /^[\w$]+/.exec(src.slice(i, i + 200))
+    if (m) { toks.push({ type: 'id', v: m[0], line }); i += m[0].length; continue }
+    toks.push({ type: 'punct', v: c, line }); i++
+  }
+  // tr('key' …) / N_('key'): the literal is the call's first argument, followed by `,` or `)`
+  return toks.flatMap((tok, k) => {
+    if (tok.type !== 'str' && tok.type !== 'tpl') return []
+    const called = toks[k - 1]?.v === '(' && toks[k - 2]?.type === 'id' && toks[k - 3]?.v !== '.' ? toks[k - 2].v : null
+    const whole = tok.type === 'str' || (tok.start && tok.end)
+    const ctx = (called === 'tr' || called === 'N_') && whole && /^[,)]$/.test(toks[k + 1]?.v) ? called : null
+    return [{ ...tok, ctx, call: called, ignored: tok.off || ignored.has(tok.line) }]
+  })
+}
+function htmlTexts(html) {
+  const decode = s => s.replace(/&(amp|lt|gt|quot|#39|nbsp|times);/g, (_, e) => ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", nbsp: ' ', times: '×' })[e])
+  const body = html.replace(/<!--[\s\S]*?-->/g, '').replace(/<(script|style)\b[\s\S]*?<\/\1>/g, '').replace(/^[\s\S]*?<\/head>/, '')
+  const out = []
+  for (const m of body.matchAll(/>([^<]+)</g)) { const v = decode(m[1]).replace(/\s+/g, ' ').trim(); if (v) out.push({ v, where: 'text' }) }
+  for (const m of body.matchAll(/\s(title|aria-label|placeholder|alt|data-keys)="([^"]*)"/g)) {
+    const v = decode(m[2]).replace(/\s+/g, ' ').trim(); if (v) out.push({ v, where: m[1] })
+  }
+  return out
+}
+function i18nProblems() {
+  const VI_LETTERS = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i
+  const VI_PLAIN = /\b(xem|tin|theo|trong|khi|cho|sang|nhanh|ghi|hay|voi|nay|lai|tim|cua|mot)\b/i // Vietnamese words with no diacritics
+  const HTML_SAME = new Set(['Agent Chat', 'MCP', 'Skill', 'Agent', 'agent', 'Timeline', 'Font', 'claude', 'codex', 'agy', 'gemini', 'qwen', 'kimi',
+    'copilot', 'cursor-agent', 'Gemini CLI · Google', 'Qwen Code · Alibaba', 'Kimi CLI · Moonshot AI', 'GitHub Copilot CLI', 'Cursor CLI', 'English', '日本語', 'Tiếng Việt'])
+  const i18n = require('./i18n'), problems = [], keys = new Map()
+  const placeholders = s => [...new Set([...String(s).matchAll(/\{(\w+)\}/g)].map(m => m[1]))].sort().join(',')
+  for (const file of ['main.js', 'core.js', 'renderer.js']) {
+    for (const s of jsStrings(fs.readFileSync(path.join(__dirname, file), 'utf8'))) {
+      if (s.ctx) { keys.set(s.v, `${file}:${s.line}`); continue }
+      if (s.call === 'tr' && s.type === 'tpl') problems.push(`${file}:${s.line} tr() cần khoá là chuỗi cố định, không phải template: ${s.v.slice(0, 60)}`)
+      if (s.ignored) continue
+      if (VI_LETTERS.test(s.v)) problems.push(`${file}:${s.line} chưa dịch: ${JSON.stringify(s.v.slice(0, 80))}`)
+    }
+  }
+  for (const h of htmlTexts(fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8'))) {
+    if (!/\p{L}/u.test(h.v) || HTML_SAME.has(h.v)) continue
+    if (h.where === 'data-keys') { if (VI_LETTERS.test(h.v)) keys.set(h.v, `index.html ${h.where}`); continue }
+    keys.set(h.v, `index.html ${h.where}`)
+  }
+  for (const lang of ['en', 'ja']) {
+    const dict = i18n.dicts[lang]
+    for (const [key, where] of keys) {
+      const value = dict[key]
+      if (value == null) { problems.push(`${lang}: thiếu bản dịch (${where}): ${JSON.stringify(key)}`); continue }
+      for (const v of [].concat(value)) {
+        if (typeof v !== 'string' || !v.trim()) problems.push(`${lang}: bản dịch rỗng: ${JSON.stringify(key)}`)
+        else if (placeholders(v) !== placeholders(key)) problems.push(`${lang}: placeholder khác khoá (${placeholders(key)} ≠ ${placeholders(v)}): ${JSON.stringify(key)}`)
+        else if (VI_LETTERS.test(v.replace(/\{\w+\}/g, '').replace(/Tiếng Việt/g, '')) || VI_PLAIN.test(v.replace(/\{\w+\}/g, ''))) problems.push(`${lang}: bản dịch còn tiếng Việt: ${JSON.stringify(v)}`)
+      }
+    }
+    for (const key of Object.keys(dict)) if (!keys.has(key)) problems.push(`${lang}: khoá thừa, code không dùng: ${JSON.stringify(key)}`)
+  }
+  return problems
 }

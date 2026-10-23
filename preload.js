@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 if (process.isMainFrame !== false) {
   contextBridge.exposeInMainWorld('api', {
+    language: () => ipcRenderer.sendSync('language'), // sync: the page needs it before it draws anything
+    setLanguage: lang => ipcRenderer.invoke('setLanguage', lang),
     projects: () => ipcRenderer.invoke('projects'),
     pick: () => ipcRenderer.invoke('pick'),
     open: (dir, chat) => ipcRenderer.invoke('open', dir, chat),

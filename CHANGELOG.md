@@ -1,5 +1,11 @@
 # Các thay đổi
 
+## 0.11.0 · 2026-10-23
+
+### Mới
+- Giao diện có thêm tiếng Anh và tiếng Nhật: chọn trong Cài đặt › Ngôn ngữ, app tải lại ngay theo ngôn ngữ mới. Lần đầu mở, app chọn theo ngôn ngữ của hệ điều hành.
+- Menu, hộp thoại, tin hệ thống trong chat và danh sách thay đổi cũng theo ngôn ngữ đã chọn. Agent được dặn trả lời bằng ngôn ngữ đó.
+
 ## 0.10.0 · 2026-10-15
 
 ### Mới

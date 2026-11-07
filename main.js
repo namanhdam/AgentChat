@@ -11,6 +11,7 @@ if (protocol?.registerSchemesAsPrivileged) {
 }
 const rawFs = process.versions.electron ? require('original-fs') : fs
 const core = require('./core')
+const i18n = require('./i18n'), tr = i18n.t
 
 // Apps launched from Finder don't get the shell PATH, so claude/codex/agy wouldn't be found. (Windows apps inherit PATH.)
 if (process.platform !== 'win32') try {
@@ -18,7 +19,8 @@ if (process.platform !== 'win32') try {
   process.env.PATH = out.split('__PATH__').pop()
 } catch {}
 
-const TASK_STATUS_LABELS = { todo: 'Cần làm', doing: 'Đang làm', review: 'Chờ duyệt', done: 'Xong' }
+const N_ = s => s // marks a translation key that tr() gets later
+const TASK_STATUS_LABELS = { todo: N_('Cần làm'), doing: N_('Đang làm'), review: N_('Chờ duyệt'), done: N_('Xong') }
 const RETRYABLE_MERGE_STATES = ['conflict', 'check-failed', 'blocked-dirty', 'blocked-config', 'needs-deps', 'error', 'paused']
 const jobs = [], orphans = [], loadedRoots = new Set(), rootDirs = new Map()
 const summaryUnavailable = new Set()
@@ -42,8 +44,8 @@ async function git(cwd, args, options = {}) {
     const result = await execFileAsync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-C', cwd, ...args], { encoding: 'utf8', maxBuffer: 2 * 1024 * 1024, ...options })
     return { stdout: result.stdout || '', stderr: result.stderr || '' }
   } catch (e) {
-    if (e.code === 'ENOENT') throw gitError('GIT_MISSING', 'Không tìm thấy Git trong PATH của app')
-    const message = redactManagedPath(String(e.stderr || e.stdout || e.message || 'Git lỗi').trim().slice(-2000))
+    if (e.code === 'ENOENT') throw gitError('GIT_MISSING', tr('Không tìm thấy Git trong PATH của app'))
+    const message = redactManagedPath(String(e.stderr || e.stdout || e.message || tr('Git lỗi')).trim().slice(-2000))
     throw gitError('GIT_ERROR', message, { exitCode: Number.isInteger(e.code) ? e.code : null })
   }
 }
@@ -74,7 +76,7 @@ function readWorktrees(root) {
     return data
   } catch (e) {
     if (e.code === 'ENOENT') return { version: 1, targetRef: null, targetSha: null, agents: [], queue: [] }
-    throw gitError('CONFIG_ERROR', 'Registry worktree không hợp lệ')
+    throw gitError('CONFIG_ERROR', tr('Registry worktree không hợp lệ'))
   }
 }
 function writeWorktrees(root, data) {
@@ -119,7 +121,7 @@ function writeControlStore(root, data) {
 function updateControlStore(root, updater) {
   const store = readControlStore(root)
   if (store.corrupted) {
-    throw gitError('CONFIG_ERROR', 'File điều phối hỏng hoặc không đọc được')
+    throw gitError('CONFIG_ERROR', tr('File điều phối hỏng hoặc không đọc được'))
   }
   const res = updater(store)
   writeControlStore(root, store)
@@ -170,7 +172,7 @@ function buildMergeFailure(root, entry, phase, error, commandResult = null) {
   }
   const filesTruncated = rawFiles.length > 50
 
-  const rawMsg = String(error?.message || 'Lỗi gộp nhánh')
+  const rawMsg = String(error?.message || tr('Lỗi gộp nhánh'))
   const message = redactManagedPath(rawMsg).slice(0, 2000)
 
   const rawExcerpt = String(error?.log || '')
@@ -216,9 +218,9 @@ function buildMergeFailure(root, entry, phase, error, commandResult = null) {
 }
 
 function managedPath(root, kind, id) {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw gitError('CONFIG_ERROR', 'Workspace ID không hợp lệ')
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw gitError('CONFIG_ERROR', tr('Workspace ID không hợp lệ'))
   const base = worktreeBase(root), target = path.join(base, kind, id)
-  if (!target.startsWith(base + path.sep)) throw gitError('CONFIG_ERROR', 'Workspace nằm ngoài vùng quản lý')
+  if (!target.startsWith(base + path.sep)) throw gitError('CONFIG_ERROR', tr('Workspace nằm ngoài vùng quản lý'))
   return target
 }
 const nul = output => output.split('\0').filter(Boolean)
@@ -226,24 +228,24 @@ async function gitHead(root) { return (await git(root, ['rev-parse', 'HEAD'])).s
 async function repoProbe(root, { requireClean = false } = {}) {
   let top
   try { top = fs.realpathSync((await git(root, ['rev-parse', '--show-toplevel'])).stdout.trim()) }
-  catch (e) { if (e.code === 'GIT_ERROR') throw gitError('NOT_REPO', 'Thư mục chưa phải Git repo'); throw e }
-  if (top !== root) throw gitError('UNSUPPORTED_REPO', 'Dự án đang nằm trong một Git repo cha')
+  catch (e) { if (e.code === 'GIT_ERROR') throw gitError('NOT_REPO', tr('Thư mục chưa phải Git repo')); throw e }
+  if (top !== root) throw gitError('UNSUPPORTED_REPO', tr('Dự án đang nằm trong một Git repo cha'))
   let sha
-  try { sha = await gitHead(root) } catch { throw gitError('UNBORN_HEAD', 'Repo chưa có commit đầu') }
+  try { sha = await gitHead(root) } catch { throw gitError('UNBORN_HEAD', tr('Repo chưa có commit đầu')) }
   let branch
   try { branch = (await git(root, ['symbolic-ref', '--quiet', '--short', 'HEAD'])).stdout.trim() }
-  catch { throw gitError('UNSUPPORTED_REPO', 'HEAD phải đang ở một nhánh') }
-  if (fs.existsSync(path.join(root, '.gitmodules'))) throw gitError('UNSUPPORTED_REPO', 'Sprint này chưa hỗ trợ submodule')
+  catch { throw gitError('UNSUPPORTED_REPO', tr('HEAD phải đang ở một nhánh')) }
+  if (fs.existsSync(path.join(root, '.gitmodules'))) throw gitError('UNSUPPORTED_REPO', tr('Sprint này chưa hỗ trợ submodule'))
   const sparse = await git(root, ['config', '--bool', 'core.sparseCheckout']).catch(() => ({ stdout: '' }))
-  if (sparse.stdout.trim() === 'true') throw gitError('UNSUPPORTED_REPO', 'Sprint này chưa hỗ trợ sparse checkout')
+  if (sparse.stdout.trim() === 'true') throw gitError('UNSUPPORTED_REPO', tr('Sprint này chưa hỗ trợ sparse checkout'))
   const trackedChat = (await git(root, ['ls-files', '-z', '--', '.chat', core.chatName(root)])).stdout
-  if (trackedChat) throw gitError('TRACKED_RUNTIME', `${core.chatName(root)} đang được Git theo dõi; hãy bỏ khỏi index trước`)
+  if (trackedChat) throw gitError('TRACKED_RUNTIME', tr('{chat} đang được Git theo dõi; hãy bỏ khỏi index trước', { chat: core.chatName(root) }))
   for (const marker of ['MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD']) {
     const markerPath = (await git(root, ['rev-parse', '--git-path', marker])).stdout.trim()
-    if (fs.existsSync(path.resolve(root, markerPath))) throw gitError('UNSUPPORTED_REPO', 'Repo đang có thao tác Git chưa hoàn tất')
+    if (fs.existsSync(path.resolve(root, markerPath))) throw gitError('UNSUPPORTED_REPO', tr('Repo đang có thao tác Git chưa hoàn tất'))
   }
   const dirty = !!(await git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all'])).stdout
-  if (requireClean && dirty) throw gitError('DIRTY_ROOT', 'Thư mục chính đang có thay đổi chưa commit')
+  if (requireClean && dirty) throw gitError('DIRTY_ROOT', tr('Thư mục chính đang có thay đổi chưa commit'))
   return { branch, sha, dirty }
 }
 async function ensureRuntimeExclude(root) {
@@ -256,29 +258,29 @@ async function ensureRuntimeExclude(root) {
     // no symlink or hard link: appending would write into whatever it points at
     const fd = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | (fs.constants.O_NOFOLLOW || 0))
     try {
-      if (fs.fstatSync(fd).nlink > 1) throw gitError('UNSUPPORTED_REPO', 'info/exclude là hard link')
+      if (fs.fstatSync(fd).nlink > 1) throw gitError('UNSUPPORTED_REPO', tr('info/exclude là hard link'))
       fs.writeSync(fd, `${text && !text.endsWith('\n') ? '\n' : ''}${text.includes('# agent-chat runtime') ? '' : '# agent-chat runtime\n'}${missing.join('\n')}\n`)
     } finally { fs.closeSync(fd) }
   }
   const ignored = await git(root, ['check-ignore', '-q', `${core.chatName(root)}/log.jsonl`]).then(() => true).catch(() => false)
-  if (!ignored) throw gitError('UNSUPPORTED_REPO', `Không thể loại ${core.chatName(root)} khỏi Git`)
+  if (!ignored) throw gitError('UNSUPPORTED_REPO', tr('Không thể loại {chat} khỏi Git', { chat: core.chatName(root) }))
 }
 
 async function verifyWorkspace(root, record) {
   const expected = managedPath(root, 'agents', record.id)
   if (path.resolve(record.path) !== expected || !fs.existsSync(expected) || fs.realpathSync(expected) !== fs.realpathSync(record.path))
-    throw gitError('CONFIG_ERROR', `Workspace của ${record.agent} không hợp lệ`)
+    throw gitError('CONFIG_ERROR', tr('Workspace của {agent} không hợp lệ', { agent: record.agent }))
   const branch = (await git(expected, ['symbolic-ref', '--quiet', '--short', 'HEAD'])).stdout.trim()
-  if (branch !== record.branch) throw gitError('TARGET_CHANGED', `Nhánh workspace của ${record.agent} đã đổi`)
+  if (branch !== record.branch) throw gitError('TARGET_CHANGED', tr('Nhánh workspace của {agent} đã đổi', { agent: record.agent }))
   const rootCommonRaw = (await git(root, ['rev-parse', '--git-common-dir'])).stdout.trim()
   const workCommonRaw = (await git(expected, ['rev-parse', '--git-common-dir'])).stdout.trim()
   const rootCommon = fs.realpathSync(path.resolve(root, rootCommonRaw)), workCommon = fs.realpathSync(path.resolve(expected, workCommonRaw))
-  if (rootCommon !== workCommon) throw gitError('CONFIG_ERROR', 'Workspace không thuộc repo của box')
+  if (rootCommon !== workCommon) throw gitError('CONFIG_ERROR', tr('Workspace không thuộc repo của box'))
   const shared = path.join(expected, core.chatName(root))
   try {
     if (!fs.lstatSync(shared).isSymbolicLink() || fs.realpathSync(shared) !== fs.realpathSync(core.chat(root)))
       throw new Error('bad link')
-  } catch { throw gitError('CONFIG_ERROR', '.chat trong workspace không trỏ đúng dữ liệu chung') }
+  } catch { throw gitError('CONFIG_ERROR', tr('.chat trong workspace không trỏ đúng dữ liệu chung')) }
   return expected
 }
 
@@ -326,7 +328,7 @@ async function prepareWorkspace(root, agent) {
   if (!settings.worktreesEnabled || scope.readOnly) return { cwd: root, workspaceId: null, branch: null, worktree: false }
   return withGitLock(root, async () => {
     const probe = await repoProbe(root), registry = readWorktrees(root)
-    if (registry.targetRef !== probe.branch) throw gitError('TARGET_CHANGED', 'Nhánh chính đã đổi ngoài app')
+    if (registry.targetRef !== probe.branch) throw gitError('TARGET_CHANGED', tr('Nhánh chính đã đổi ngoài app'))
     let record = registry.agents.find(item => String(item.agent).toLowerCase() === String(agent.name).toLowerCase())
     if (!record) {
       const id = randomUUID(), boxKey = createHash('sha256').update(root).digest('hex').slice(0, 10)
@@ -347,18 +349,18 @@ async function prepareWorkspace(root, agent) {
 async function startWorkspace(job) {
   return withGitLock(job.root, async () => {
     const probe = await repoProbe(job.root), registry = readWorktrees(job.root), record = registry.agents.find(item => item.id === job.workspaceId)
-    if (registry.targetRef !== probe.branch) throw gitError('TARGET_CHANGED', 'Nhánh chính đã đổi ngoài app')
-    if (!record) throw gitError('CONFIG_ERROR', 'Không tìm thấy workspace của agent')
-    if (record.recoveryPending) throw gitError('BUSY', 'Workspace đang phục hồi; hãy hoàn tất thao tác Lấy main trong hàng chờ')
+    if (registry.targetRef !== probe.branch) throw gitError('TARGET_CHANGED', tr('Nhánh chính đã đổi ngoài app'))
+    if (!record) throw gitError('CONFIG_ERROR', tr('Không tìm thấy workspace của agent'))
+    if (record.recoveryPending) throw gitError('BUSY', tr('Workspace đang phục hồi; hãy hoàn tất thao tác Lấy main trong hàng chờ'))
     const cwd = await verifyWorkspace(job.root, record), files = await workspaceChanges(cwd)
     // Left by an earlier turn (cut off, failed the audit, or a merge the agent didn't finish). Refusing would block the
     // agent for good, so they are committed under the same scope rule as an audited turn.
     if (files.length) {
       const unmerged = nul((await git(cwd, ['diff', '--name-only', '--diff-filter=U', '-z'])).stdout)
       if (unmerged.length || files.some(file => isChatPath(file) || !core.scopeAllows(job.scope, file)))
-        throw gitError('DIRTY_WORKSPACE', `Workspace của ${job.name} có thay đổi chưa được app ghi nhận: ${files.slice(0, 5).join(', ')}${files.length > 5 ? '…' : ''}`)
+        throw gitError('DIRTY_WORKSPACE', tr('Workspace của {agent} có thay đổi chưa được app ghi nhận: {files}', { agent: job.name, files: files.slice(0, 5).join(', ') + (files.length > 5 ? '…' : '') }))
       await git(cwd, ['add', '--', ...files])
-      await git(cwd, ['-c', 'user.name=Agent Chat', '-c', 'user.email=agent-chat@local', 'commit', '-m', `${job.name} · Thay đổi còn lại từ lượt trước`])
+      await git(cwd, ['-c', 'user.name=Agent Chat', '-c', 'user.email=agent-chat@local', 'commit', '-m', tr('{agent} · Thay đổi còn lại từ lượt trước', { agent: job.name })])
     }
     // everything on the branch is already in main (merged, or squashed into it): start from main
     const head = await gitHead(cwd)
@@ -369,9 +371,9 @@ async function startWorkspace(job) {
 }
 
 function queueLabel(entry) {
-  return ({ queued: 'Chờ gộp', merging: 'Đang gộp', checking: 'Đang kiểm tra', publishing: 'Đang xuất bản', merged: 'Đã gộp',
-    conflict: 'Xung đột', 'check-failed': 'Check lỗi', 'blocked-dirty': 'Thư mục chính bẩn', 'blocked-config': 'Cấu hình đổi',
-    'needs-deps': 'Thiếu dependency', paused: 'Đã dừng', error: 'Lỗi', replaced: 'Đã thay bằng main (có sao lưu)' })[entry.state] || entry.state
+  return ({ queued: tr('Chờ gộp'), merging: tr('Đang gộp'), checking: tr('Đang kiểm tra'), publishing: tr('Đang xuất bản'), merged: tr('Đã gộp'),
+    conflict: tr('Xung đột'), 'check-failed': tr('Check lỗi'), 'blocked-dirty': tr('Thư mục chính bẩn'), 'blocked-config': tr('Cấu hình đổi'),
+    'needs-deps': tr('Thiếu dependency'), paused: tr('Đã dừng'), error: tr('Lỗi'), replaced: tr('Đã thay bằng main (có sao lưu)') })[entry.state] || entry.state
 }
 
 async function worktreeState(root) {
@@ -420,7 +422,7 @@ function initialIgnore(existing = '') {
   return text
 }
 async function gitInitPreview(root) {
-  if (fs.existsSync(path.join(root, '.git'))) throw gitError('UNSUPPORTED_REPO', 'Thư mục đã có .git')
+  if (fs.existsSync(path.join(root, '.git'))) throw gitError('UNSUPPORTED_REPO', tr('Thư mục đã có .git'))
   const files = [], fingerprints = []
   async function walk(folder, prefix = '') {
     for (const entry of await rawFs.promises.readdir(folder, { withFileTypes: true })) {
@@ -449,15 +451,15 @@ async function gitInitPreview(root) {
 }
 
 async function initializeGit(root, request) {
-  if (!request || typeof request.token !== 'string' || !Array.isArray(request.files)) throw gitError('INVALID_ARGUMENT', 'Yêu cầu khởi tạo Git không hợp lệ')
+  if (!request || typeof request.token !== 'string' || !Array.isArray(request.files)) throw gitError('INVALID_ARGUMENT', tr('Yêu cầu khởi tạo Git không hợp lệ'))
   const preview = await gitInitPreview(root)
-  if (preview.token !== request.token) throw gitError('STALE_PREVIEW', 'File đã thay đổi từ lúc xem trước')
+  if (preview.token !== request.token) throw gitError('STALE_PREVIEW', tr('File đã thay đổi từ lúc xem trước'))
   const allowed = new Set(preview.files), selected = [...new Set(request.files)]
   if (!selected.length || selected.some(file => typeof file !== 'string' || !allowed.has(file)) || !selected.includes('.gitignore'))
-    throw gitError('INVALID_ARGUMENT', 'Danh sách file commit đầu không hợp lệ')
+    throw gitError('INVALID_ARGUMENT', tr('Danh sách file commit đầu không hợp lệ'))
   core.atomicWrite(path.join(root, '.gitignore'), preview.ignoreText) // replaces a planted symlink instead of writing through it
   await execFileAsync('git', ['init', '-b', 'main', root], { encoding: 'utf8' }).catch(e => {
-    if (e.code === 'ENOENT') throw gitError('GIT_MISSING', 'Không tìm thấy Git trong PATH của app')
+    if (e.code === 'ENOENT') throw gitError('GIT_MISSING', tr('Không tìm thấy Git trong PATH của app'))
     throw gitError('GIT_ERROR', String(e.stderr || e.message).trim())
   })
   await git(root, ['add', '--', ...selected])
@@ -471,10 +473,10 @@ async function enableWorktrees(root, settings) {
   for (const agent of core.team(root)) {
     const scope = core.normalizeScope(agent, root)
     if (!scope.readOnly) for (const command of settings.mergeChecks) if (!agent.allowedCommands.includes(command))
-      throw gitError('CHECK_NOT_ALLOWED', `Lệnh "${command}" chưa được cho phép với @${agent.name}`)
+      throw gitError('CHECK_NOT_ALLOWED', tr('Lệnh "{command}" chưa được cho phép với @{agent}', { command, agent: agent.name }))
   }
   const registry = readWorktrees(root)
-  if (registry.targetRef && registry.targetRef !== probe.branch) throw gitError('TARGET_CHANGED', 'Nhánh chính đã đổi ngoài app')
+  if (registry.targetRef && registry.targetRef !== probe.branch) throw gitError('TARGET_CHANGED', tr('Nhánh chính đã đổi ngoài app'))
   registry.targetRef = probe.branch; registry.targetSha = probe.sha
   writeWorktrees(root, registry)
 }
@@ -493,8 +495,8 @@ async function turnSubject(job, result, files) {
   if (ids.length) try { title = (await core.taskBoardIndexed(job.root)).tasks.find(task => task.id === ids[0])?.title } catch {}
   const names = [...new Set(files.map(file => path.basename(file)))]
   const what = ids.length ? `${ids.slice(0, 3).join(' ')}${title ? ` ${title}` : ''}`
-    : names.length ? `Sửa ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` +${names.length - 3}` : ''}` : 'Cập nhật'
-  const subject = `${job.name} · ${what}${result.outcome === 'success' ? '' : ' (lượt chưa xong)'}`.replace(/\s+/g, ' ')
+    : names.length ? tr('Sửa {files}', { files: names.slice(0, 3).join(', ') + (names.length > 3 ? ` +${names.length - 3}` : '') }) : tr('Cập nhật')
+  const subject = (result.outcome === 'success' ? `${job.name} · ${what}` : tr('{agent} · {what} (lượt chưa xong)', { agent: job.name, what })).replace(/\s+/g, ' ')
   return subject.length > 72 ? `${subject.slice(0, 71)}…` : subject
 }
 
@@ -502,11 +504,11 @@ async function commitWorkspace(job, result, changed, auditComplete, outside) {
   if (!job.worktree || result.orphanState) return null
   return withGitLock(job.root, async () => {
     const registry = readWorktrees(job.root), record = registry.agents.find(item => item.id === job.workspaceId)
-    if (!record) throw gitError('CONFIG_ERROR', 'Không tìm thấy workspace của agent')
+    if (!record) throw gitError('CONFIG_ERROR', tr('Không tìm thấy workspace của agent'))
     const cwd = await verifyWorkspace(job.root, record), beforeHead = await gitHead(cwd)
     // the agent may commit (or merge) by itself; only a rewritten history is refused
     if (beforeHead !== job.baseSha && !await git(cwd, ['merge-base', '--is-ancestor', job.baseSha, beforeHead]).then(() => true).catch(() => false))
-      throw gitError('TARGET_CHANGED', 'Lịch sử nhánh workspace bị viết lại trong lúc agent chạy')
+      throw gitError('TARGET_CHANGED', tr('Lịch sử nhánh workspace bị viết lại trong lúc agent chạy'))
     const files = await workspaceChanges(cwd)
     if (outside.length) {
       const probe = await repoProbe(job.root).catch(() => null)
@@ -518,7 +520,7 @@ async function commitWorkspace(job, result, changed, auditComplete, outside) {
       }
     }
     if (!auditComplete || outside.length || files.some(file => !changed.includes(file) || isChatPath(file) || !core.scopeAllows(job.scope, file))) {
-      if (files.length) throw gitError('SCOPE_AUDIT', 'Không tự commit vì thay đổi chưa qua kiểm tra phạm vi', { files })
+      if (files.length) throw gitError('SCOPE_AUDIT', tr('Không tự commit vì thay đổi chưa qua kiểm tra phạm vi'), { files })
       return null
     }
     let headSha = beforeHead, subject = null
@@ -526,7 +528,7 @@ async function commitWorkspace(job, result, changed, auditComplete, outside) {
       await git(cwd, ['add', '--', ...files])
       const staged = nul((await git(cwd, ['diff', '--cached', '--no-renames', '--name-only', '-z', 'HEAD'])).stdout)
       if (!staged.length || staged.some(file => !files.includes(file) || !core.scopeAllows(job.scope, file)))
-        throw gitError('SCOPE_AUDIT', 'Tập file chuẩn bị commit không hợp lệ', { files: staged })
+        throw gitError('SCOPE_AUDIT', tr('Tập file chuẩn bị commit không hợp lệ'), { files: staged })
       subject = await turnSubject(job, result, staged)
       await git(cwd, ['-c', 'user.name=Agent Chat', '-c', 'user.email=agent-chat@local', 'commit', '-m', subject, '-m', `Agent-Chat-Run: ${job.runId}`])
       headSha = await gitHead(cwd)
@@ -572,7 +574,7 @@ function updateEntry(root, id, change) {
   let entry
   updateRegistry(root, registry => {
     entry = registry.queue.find(item => item.id === id)
-    if (!entry) throw gitError('CONFIG_ERROR', 'Mục gộp không còn trong hàng chờ')
+    if (!entry) throw gitError('CONFIG_ERROR', tr('Mục gộp không còn trong hàng chờ'))
     change(entry, registry)
   })
   return entry
@@ -605,38 +607,38 @@ async function replaceMergeSource(root, queueId) {
   const registry = readWorktrees(root), old = registry.queue.find(entry => entry.id === queueId)
   if (old?.supersededBy && registry.queue.some(entry => entry.id === old.supersededBy && entry.state === 'replaced')) return
   if (!old || old.supersededBy || !RETRYABLE_MERGE_STATES.includes(old.state))
-    throw gitError('INVALID_ARGUMENT', 'Nguồn này không còn cần phục hồi')
+    throw gitError('INVALID_ARGUMENT', tr('Nguồn này không còn cần phục hồi'))
   const record = registry.agents.find(item => item.id === old.workspaceId)
-  if (!record) throw gitError('CONFIG_ERROR', 'Workspace không còn tồn tại')
+  if (!record) throw gitError('CONFIG_ERROR', tr('Workspace không còn tồn tại'))
   const assertIdle = () => {
     if (jobs.some(job => job.root === root && !job.finished) || orphans.some(job => job.root === root)
       || mergeWorkers.has(root) || registry.queue.some(entry => ['queued', 'merging', 'checking', 'publishing'].includes(entry.state) && !entry.supersededBy))
-      throw gitError('BUSY', 'Chờ các lượt agent và hàng chờ đang chạy kết thúc trước khi lấy main')
+      throw gitError('BUSY', tr('Chờ các lượt agent và hàng chờ đang chạy kết thúc trước khi lấy main'))
   }
   assertIdle()
   const cwd = await verifyWorkspace(root, record), probe = await repoProbe(root, { requireClean: true })
-  if (probe.branch !== registry.targetRef) throw gitError('TARGET_CHANGED', 'Nhánh chính đã đổi ngoài app')
+  if (probe.branch !== registry.targetRef) throw gitError('TARGET_CHANGED', tr('Nhánh chính đã đổi ngoài app'))
   const pending = record.recoveryPending
   if (pending && (pending.sourceSha !== old.headSha || pending.targetSha !== probe.sha))
-    throw gitError('TARGET_CHANGED', 'Main hoặc nguồn đã đổi từ lần phục hồi trước; giữ bản sao lưu để đối chiếu')
+    throw gitError('TARGET_CHANGED', tr('Main hoặc nguồn đã đổi từ lần phục hồi trước; giữ bản sao lưu để đối chiếu'))
   const checkSource = async () => {
     assertIdle()
     const latest = await repoProbe(root, { requireClean: true }), source = await repoProbe(fs.realpathSync(cwd), { requireClean: true })
     if (latest.sha !== probe.sha || latest.branch !== registry.targetRef || source.branch !== record.branch
       || (source.sha !== old.headSha && !(pending && source.sha === pending.targetSha)))
-      throw gitError('TARGET_CHANGED', 'Main hoặc workspace đã đổi; hãy kiểm lại trước khi phục hồi')
+      throw gitError('TARGET_CHANGED', tr('Main hoặc workspace đã đổi; hãy kiểm lại trước khi phục hồi'))
     return source.sha
   }
   await checkSource()
   const diff = (await git(root, ['diff', '--stat', old.headSha, probe.sha])).stdout.trim()
   const answer = await dialog.showMessageBox(win, {
-    type: 'warning', title: 'Lấy main và sao lưu nhánh',
-    message: `Thay nguồn của ${record.agent} bằng ${probe.branch}?`,
-    detail: `Nguồn ${old.headSha.slice(0, 12)} → main ${probe.sha.slice(0, 12)}.\nCác thay đổi riêng sẽ chỉ còn trong nhánh sao lưu. Đây không phải thao tác gộp; chỉ dùng sau khi đối chiếu phần cần giữ đã có trên main. Lịch sử lỗi và bằng chứng được giữ nguyên.\n\n${diff.slice(0, 6000)}`,
-    checkboxLabel: 'Tôi đã đối chiếu và đồng ý thay nguồn này bằng main', checkboxChecked: false,
-    buttons: ['Hủy', 'Sao lưu và lấy main'], defaultId: 0, cancelId: 0, noLink: true
+    type: 'warning', title: tr('Lấy main và sao lưu nhánh'),
+    message: tr('Thay nguồn của {agent} bằng {branch}?', { agent: record.agent, branch: probe.branch }),
+    detail: tr('Nguồn {from} → main {to}.\nCác thay đổi riêng sẽ chỉ còn trong nhánh sao lưu. Đây không phải thao tác gộp; chỉ dùng sau khi đối chiếu phần cần giữ đã có trên main. Lịch sử lỗi và bằng chứng được giữ nguyên.', { from: old.headSha.slice(0, 12), to: probe.sha.slice(0, 12) }) + `\n\n${diff.slice(0, 6000)}`,
+    checkboxLabel: tr('Tôi đã đối chiếu và đồng ý thay nguồn này bằng main'), checkboxChecked: false,
+    buttons: [tr('Hủy'), tr('Sao lưu và lấy main')], defaultId: 0, cancelId: 0, noLink: true
   })
-  if (answer.response !== 1 || !answer.checkboxChecked) throw gitError('CANCELLED', 'Đã hủy, workspace và hàng chờ giữ nguyên')
+  if (answer.response !== 1 || !answer.checkboxChecked) throw gitError('CANCELLED', tr('Đã hủy, workspace và hàng chờ giữ nguyên'))
   await checkSource()
   const recovery = pending || { id: randomUUID(), sourceSha: old.headSha, targetSha: probe.sha, at: new Date().toISOString() }
   if (!pending) {
@@ -654,10 +656,10 @@ async function replaceMergeSource(root, queueId) {
   }
   // Revalidate the backup even when completing an interrupted operation. Never discard an unrecorded source.
   if ((await git(root, ['rev-parse', '--verify', recovery.backupRef])).stdout.trim() !== old.headSha)
-    throw gitError('CONFIG_ERROR', 'Nhánh sao lưu không khớp nguồn cần giữ')
+    throw gitError('CONFIG_ERROR', tr('Nhánh sao lưu không khớp nguồn cần giữ'))
   const head = await checkSource()
   if (head !== probe.sha) await git(cwd, ['reset', '--keep', probe.sha])
-  if (await gitHead(cwd) !== probe.sha) throw gitError('TARGET_CHANGED', 'Không xác minh được nguồn sau phục hồi')
+  if (await gitHead(cwd) !== probe.sha) throw gitError('TARGET_CHANGED', tr('Không xác minh được nguồn sau phục hồi'))
   updateRegistry(root, latest => {
     const at = new Date().toISOString()
     latest.queue.push({ id: recovery.id, workspaceId: record.id, agent: record.agent, headSha: old.headSha,
@@ -667,7 +669,7 @@ async function replaceMergeSource(root, queueId) {
       && entry.headSha === old.headSha && !entry.supersededBy && RETRYABLE_MERGE_STATES.includes(entry.state)) entry.supersededBy = recovery.id
     delete latest.agents.find(item => item.id === record.id).recoveryPending
   })
-  await post(root, 'system', `Đã sao lưu nguồn cũ của ${record.agent} và lấy main; các mục lỗi cùng nguồn đã được thay thế.`,
+  await post(root, 'system', tr('Đã sao lưu nguồn cũ của {agent} và lấy main; các mục lỗi cùng nguồn đã được thay thế.', { agent: record.agent }),
     { kind: 'merge-recovery', workspaceId: record.id, sourceSha: old.headSha, replacementSha: probe.sha, backupRef: recovery.backupRef, snapshotId: recovery.id })
 }
 
@@ -695,15 +697,15 @@ async function processMerge(root, id) {
     const cur = readWorktrees(root).queue.find(item => item.id === id)
     if (cur?.mergeEvent) {
       const mergeEvent = cur.mergeEvent
-      await postOnce(root, mergeEvent.eventId, 'system', `@${cur.agent} chưa gộp được nhánh: ${message}`, {
+      await postOnce(root, mergeEvent.eventId, 'system', tr('@{agent} chưa gộp được nhánh: {error}', { agent: cur.agent, error: message }), {
         kind: 'merge', eventId: mergeEvent.eventId, queueId: cur.id, owner: cur.agent, headSha: cur.headSha, error: cur.error, mergeEvent
       })
     }
   }
   try { await ensureTrustedConfig(root) } catch (e) { return refuse('CONFIG_UNTRUSTED', e.message) }
   const owner = core.team(root).find(agent => agent.name === entry.agent)
-  if (!owner) return refuse('CHECK_NOT_ALLOWED', 'Agent sở hữu nhánh không còn trong nhóm')
-  for (const command of entry.checks) if (!owner.allowedCommands.includes(command)) return refuse('CHECK_NOT_ALLOWED', `Lệnh "${command}" không còn được phép`)
+  if (!owner) return refuse('CHECK_NOT_ALLOWED', tr('Agent sở hữu nhánh không còn trong nhóm'))
+  for (const command of entry.checks) if (!owner.allowedCommands.includes(command)) return refuse('CHECK_NOT_ALLOWED', tr('Lệnh "{command}" không còn được phép', { command }))
   const integration = managedPath(root, 'integration', id)
   let probe, requeued = false, commandsRun = [], docsOnly = false
   try {
@@ -715,7 +717,7 @@ async function processMerge(root, id) {
       if (stopped) return true
       await emitWorktreeState(root)
       probe = await repoProbe(root, { requireClean: true })
-      if (probe.branch !== readWorktrees(root).targetRef) throw gitError('TARGET_CHANGED', 'Nhánh chính đã đổi ngoài app')
+      if (probe.branch !== readWorktrees(root).targetRef) throw gitError('TARGET_CHANGED', tr('Nhánh chính đã đổi ngoài app'))
       const alreadyMerged = async () => {
         updateEntry(root, id, (item, registry) => { item.state = 'merged'; item.updatedAt = now(); registry.targetSha = probe.sha; rememberMerged(registry, item) })
         await syncWorkspace(root, entry.workspaceId, probe.sha).catch(e => console.error(e))
@@ -726,24 +728,24 @@ async function processMerge(root, id) {
       const files = nul((await git(root, ['diff', '--no-renames', '--name-only', '-z', `${base}..${entry.headSha}`])).stdout)
       const scope = core.normalizeScope(owner, root)
       if (files.some(file => !core.scopeAllows(scope, file) || isChatPath(file)))
-        throw gitError('SCOPE_AUDIT', 'Nhánh chứa file ngoài phạm vi', { files })
+        throw gitError('SCOPE_AUDIT', tr('Nhánh chứa file ngoài phạm vi'), { files })
       updateEntry(root, id, item => { item.baseSha = probe.sha })
       fs.mkdirSync(path.dirname(integration), { recursive: true })
       await git(root, ['worktree', 'add', '--detach', integration, probe.sha])
       try { await git(integration, ['merge', '--squash', entry.headSha]) }
       catch (e) {
         const conflicts = nul((await git(integration, ['diff', '--name-only', '--diff-filter=U', '-z'])).stdout)
-        if (conflicts.length) throw gitError('CONFLICT', 'Nhánh xung đột với thay đổi đã gộp', { files: conflicts })
+        if (conflicts.length) throw gitError('CONFLICT', tr('Nhánh xung đột với thay đổi đã gộp'), { files: conflicts })
         throw e
       }
       // a branch whose changes main already has (squashed earlier, or the agent merged main and kept nothing new)
       const staged = nul((await git(integration, ['diff', '--cached', '--name-only', '-z'])).stdout)
       if (!staged.length) { await removeIntegration(root, entry); return alreadyMerged() }
-      // reports and notes can't break the build: no install, no checks (CHANGELOG.md is checked against package.json)
-      docsOnly = staged.every(file => file.startsWith('reports/') || (file.endsWith('.md') && file !== 'CHANGELOG.md'))
+      // reports and notes can't break the build: no install, no checks (CHANGELOG*.md are checked against package.json)
+      docsOnly = staged.every(file => file.startsWith('reports/') || (file.endsWith('.md') && !/^CHANGELOG(\.\w+)?\.md$/.test(file)))
       currentPhase = 'dependencies'
-      if (!docsOnly && !await bootstrapDependencies(root, integration)) throw gitError('NEEDS_DEPS', 'Integration worktree chưa có dependency phù hợp')
-      await git(integration, ['-c', 'user.name=Agent Chat', '-c', 'user.email=agent-chat@local', 'commit', '-m', entry.subject || `${entry.agent} · Cập nhật`,
+      if (!docsOnly && !await bootstrapDependencies(root, integration)) throw gitError('NEEDS_DEPS', tr('Integration worktree chưa có dependency phù hợp'))
+      await git(integration, ['-c', 'user.name=Agent Chat', '-c', 'user.email=agent-chat@local', 'commit', '-m', entry.subject || tr('{agent} · Cập nhật', { agent: entry.agent }),
         '-m', `Agent-Chat-Queue: ${entry.id}`])
       const candidateSha = await gitHead(integration)
       entry = updateEntry(root, id, item => { item.candidateSha = candidateSha; item.state = 'checking'; item.updatedAt = now() })
@@ -768,24 +770,24 @@ async function processMerge(root, id) {
         entry.pgid = null; updateEntry(root, id, item => { item.pgid = null }); persistRegistry(root)
         commandsRun.push({ command, exitCode: result?.exitCode ?? null, signal: result?.signal ?? null, error: result?.error ?? null })
         if (controller.signal.aborted) {
-          mergeFailed = gitError('PAUSED', controller.signal.reason === 'timeout' ? 'Kiểm tra gộp quá giờ' : 'Đã dừng kiểm tra gộp')
+          mergeFailed = gitError('PAUSED', controller.signal.reason === 'timeout' ? tr('Kiểm tra gộp quá giờ') : tr('Đã dừng kiểm tra gộp'))
           break
         }
         if (result.error || result.exitCode !== 0) {
-          mergeFailed = gitError('CHECK_FAILED', `Lệnh kiểm tra lỗi: ${command}`, { log: `${result.stdout}\n${result.stderr}` })
+          mergeFailed = gitError('CHECK_FAILED', tr('Lệnh kiểm tra lỗi: {command}', { command }), { log: `${result.stdout}\n${result.stderr}` })
           break
         }
       }
     } finally { mergeControllers.delete(root) }
     const treeStatus = await git(integration, ['status', '--porcelain=v1', '-z', '--untracked-files=all']).catch(() => ({ stdout: '' }))
-    if (!mergeFailed && treeStatus.stdout) mergeFailed = gitError('CHECK_MUTATED_TREE', 'Lệnh kiểm tra đã sửa cây source')
+    if (!mergeFailed && treeStatus.stdout) mergeFailed = gitError('CHECK_MUTATED_TREE', tr('Lệnh kiểm tra đã sửa cây source'))
     if (mergeFailed) throw mergeFailed
     currentPhase = 'publish'
     // 3. under the lock again: publish only if the target branch hasn't moved since step 1
     await withGitLock(root, async () => {
       entry = updateEntry(root, id, item => { item.state = 'publishing'; item.updatedAt = now() }); await emitWorktreeState(root)
       const latest = await repoProbe(root, { requireClean: true })
-      if (latest.branch !== readWorktrees(root).targetRef) throw gitError('TARGET_CHANGED', 'Nhánh chính đã đổi ngoài app')
+      if (latest.branch !== readWorktrees(root).targetRef) throw gitError('TARGET_CHANGED', tr('Nhánh chính đã đổi ngoài app'))
       if (latest.sha !== probe.sha) {
         await removeIntegration(root, entry)
         updateEntry(root, id, (item, registry) => {
@@ -797,12 +799,12 @@ async function processMerge(root, id) {
       }
       await git(root, ['merge', '--ff-only', '--no-edit', '--no-overwrite-ignore', '--no-autostash', entry.candidateSha])
       const published = await gitHead(root)
-      if (published !== entry.candidateSha) throw gitError('TARGET_CHANGED', 'Không xác minh được commit đã xuất bản')
+      if (published !== entry.candidateSha) throw gitError('TARGET_CHANGED', tr('Không xác minh được commit đã xuất bản'))
       updateEntry(root, id, (item, registry) => { item.state = 'merged'; item.error = null; item.updatedAt = now(); registry.targetSha = published; rememberMerged(registry, item) })
       await removeIntegration(root, entry)
       await syncWorkspace(root, entry.workspaceId, published).catch(e => console.error(e)) // main is already published: a stuck workspace syncs at its next turn
     })
-    if (!requeued) await post(root, 'system', `Đã gộp nhánh của ${entry.agent} sau khi kiểm tra đạt.`, { kind: 'merge', queueId: entry.id, owner: entry.agent, headSha: entry.headSha })
+    if (!requeued) await post(root, 'system', tr('Đã gộp nhánh của {agent} sau khi kiểm tra đạt.', { agent: entry.agent }), { kind: 'merge', queueId: entry.id, owner: entry.agent, headSha: entry.headSha })
   } catch (e) {
     const lastCommandResult = commandsRun.find(c => c.error || (c.exitCode !== 0 && c.exitCode != null) || c.signal) || null
     entry = updateEntry(root, id, item => {
@@ -813,7 +815,7 @@ async function processMerge(root, id) {
     await removeIntegration(root, entry)
     const mergeEvent = entry.mergeEvent
     if (mergeEvent) {
-      await postOnce(root, mergeEvent.eventId, 'system', `@${entry.agent} chưa gộp được nhánh: ${e.message}`, { kind: 'merge', eventId: mergeEvent.eventId, queueId: entry.id, owner: entry.agent,
+      await postOnce(root, mergeEvent.eventId, 'system', tr('@{agent} chưa gộp được nhánh: {error}', { agent: entry.agent, error: e.message }), { kind: 'merge', eventId: mergeEvent.eventId, queueId: entry.id, owner: entry.agent,
         headSha: entry.headSha, error: entry.error, mergeEvent })
     }
   } finally {
@@ -923,9 +925,10 @@ function progress(job, label = job.label, extra) {
 }
 
 async function terminal(job, result, waiting = false) {
-  const text = result.outcome === 'stopped' ? `@${job.name} đã bị dừng${waiting ? ' khi chờ' : ''}`
-    : result.outcome === 'timeout' ? `@${job.name} quá giờ${waiting ? ' khi chờ khóa' : ''}`
-      : result.outcome === 'error' ? `@${job.name} lỗi: ${result.text}` : result.text
+  const agent = job.name
+  const text = result.outcome === 'stopped' ? (waiting ? tr('@{agent} đã bị dừng khi chờ', { agent }) : tr('@{agent} đã bị dừng', { agent }))
+    : result.outcome === 'timeout' ? (waiting ? tr('@{agent} quá giờ khi chờ khóa', { agent }) : tr('@{agent} quá giờ', { agent }))
+      : result.outcome === 'error' ? tr('@{agent} lỗi: {error}', { agent, error: result.text }) : result.text
   const msg = await post(job.dir, result.outcome === 'success' ? job.name : 'system', text,
     { runId: job.runId, agent: job.name, cli: job.agent.cli, ...(result.model ? { model: result.model } : {}), outcome: result.outcome, usage: result.usage,
       chainId: job.chain?.id || null, sourceSeqs: (job.sourceRefs || []).map(r => r.seq),
@@ -974,7 +977,7 @@ function stopJob(job, reason) {
     return true
   }
   job.stopping = true
-  progress(job, 'đang dừng…')
+  progress(job, tr('đang dừng…'))
   if (job.phase === 'checking') {
     if (!job.auditController.signal.aborted) job.auditController.abort('stopped')
   } else if (!job.controller.signal.aborted) job.controller.abort(reason)
@@ -1028,24 +1031,24 @@ function storedPending(record) {
     sourceRefs: (p.sourceSeqs || []).map(seq => (record.sourceRefs || []).find(r => r.seq === seq)).filter(Boolean) })))
 }
 async function sourceMessages(root, refs) {
-  if (!Array.isArray(refs) || !refs.length) throw gitError('UNAVAILABLE', 'Thiếu tin nguồn của công việc đang chờ')
+  if (!Array.isArray(refs) || !refs.length) throw gitError('UNAVAILABLE', tr('Thiếu tin nguồn của công việc đang chờ'))
   const messages = []
   for (const ref of refs) {
-    if (!ref || !Number.isInteger(ref.seq) || !ref.at || !ref.textHash) throw gitError('UNAVAILABLE', 'Tham chiếu tin nguồn không hợp lệ')
+    if (!ref || !Number.isInteger(ref.seq) || !ref.at || !ref.textHash) throw gitError('UNAVAILABLE', tr('Tham chiếu tin nguồn không hợp lệ'))
     const msg = (await core.logPage(root, { around: ref.seq, limit: 1 })).messages[0]
     if (!msg || msg.seq !== ref.seq || msg.retracted || msg.at !== ref.at || sourceRef(msg).textHash !== ref.textHash)
-      throw gitError('UNAVAILABLE', 'Tin nguồn đã thay đổi hoặc bị thu hồi; hãy kiểm tra lịch sử')
+      throw gitError('UNAVAILABLE', tr('Tin nguồn đã thay đổi hoặc bị thu hồi; hãy kiểm tra lịch sử'))
     messages.push(msg)
   }
   return messages.sort((a, b) => a.seq - b.seq)
 }
 async function findChainStop(root, id) {
   const index = await core.getLogIndex(root)
-  if (index.error) throw gitError('UNAVAILABLE', 'Lịch sử lỗi; không thể xác minh Tiếp tục')
+  if (index.error) throw gitError('UNAVAILABLE', tr('Lịch sử lỗi; không thể xác minh Tiếp tục'))
   const seq = Number.isInteger(id) ? id : index.records.findIndex(r => r.kind === 'chain-stop' && (r.stopId === id || r.chainId === id || r.runId === id))
-  if (!Number.isInteger(seq) || seq < 0) throw gitError('INVALID_ARGUMENT', 'Không tìm thấy thẻ dừng')
+  if (!Number.isInteger(seq) || seq < 0) throw gitError('INVALID_ARGUMENT', tr('Không tìm thấy thẻ dừng'))
   const stop = (await core.logPage(root, { around: seq, limit: 1 })).messages[0]
-  if (stop?.seq !== seq || stop.kind !== 'chain-stop') throw gitError('INVALID_ARGUMENT', 'Không tìm thấy thẻ dừng')
+  if (stop?.seq !== seq || stop.kind !== 'chain-stop') throw gitError('INVALID_ARGUMENT', tr('Không tìm thấy thẻ dừng'))
   return stop
 }
 const stopKey = stop => stop.stopId || stop.chainId || stop.runId || String(stop.seq)
@@ -1060,19 +1063,19 @@ function recoverChainControl(root) {
   if (controlRecovery.has(key)) return controlRecovery.get(key)
   const work = withChainOperation(root, async () => {
     const store = readControlStore(root)
-    if (store.corrupted) throw gitError('UNAVAILABLE', 'File điều phối hỏng; không thể xác minh Tiếp tục')
+    if (store.corrupted) throw gitError('UNAVAILABLE', tr('File điều phối hỏng; không thể xác minh Tiếp tục'))
     const index = await core.getLogIndex(root)
-    if (index.error) throw gitError('UNAVAILABLE', 'Lịch sử lỗi; không thể khôi phục điều phối')
+    if (index.error) throw gitError('UNAVAILABLE', tr('Lịch sử lỗi; không thể khôi phục điều phối'))
     const terminals = new Map(index.records.flatMap((r, seq) => r.runId && r.outcome ? [[r.runId, { ...r, seq }]] : []))
     for (const claim of Object.values(store.claims)) {
       if (claim.kind !== 'continue' || activeChains.has(claim.childChainId)) continue
-      if (!claim.childChainId || !Array.isArray(claim.dispatches)) throw gitError('UNAVAILABLE', 'Claim Tiếp tục thiếu dữ kiện')
+      if (!claim.childChainId || !Array.isArray(claim.dispatches)) throw gitError('UNAVAILABLE', tr('Claim Tiếp tục thiếu dữ kiện'))
       const parent = store.stops[claim.stopId]
-      if (!parent?.state) throw gitError('UNAVAILABLE', 'Claim Tiếp tục không còn checkpoint cha')
+      if (!parent?.state) throw gitError('UNAVAILABLE', tr('Claim Tiếp tục không còn checkpoint cha'))
       await sourceMessages(root, [parent.logMessageRef])
       const notice = index.records.find(r => r.kind === 'chain-continue' && (r.stopId === claim.stopId || r.continuedFrom === parent.logMessageRef.seq))
-      if (notice?.childChainId && notice.childChainId !== claim.childChainId) throw gitError('UNAVAILABLE', 'Claim và lịch sử Tiếp tục không khớp')
-      if (!notice) await postOnce(root, 'continue:' + claim.stopId, 'system', 'Khôi phục trạng thái Tiếp tục đã nhận; không tự chạy lại agent.',
+      if (notice?.childChainId && notice.childChainId !== claim.childChainId) throw gitError('UNAVAILABLE', tr('Claim và lịch sử Tiếp tục không khớp'))
+      if (!notice) await postOnce(root, 'continue:' + claim.stopId, 'system', tr('Khôi phục trạng thái Tiếp tục đã nhận; không tự chạy lại agent.'),
         { kind: 'chain-continue', stopId: claim.stopId, childChainId: claim.childChainId, continuedFrom: parent.logMessageRef.seq, targets: claim.dispatches.map(d => d.agent) })
       const pending = []
       for (const d of claim.dispatches) {
@@ -1102,7 +1105,7 @@ function recoverChainControl(root) {
         if (pending.length && !latest.stops[claim.childChainId]) {
           latest.stops[claim.childChainId] = { stopId: claim.childChainId, chainId: claim.childChainId, pending, running: [], accountedRunIds: ended.map(t => t.runId), sourceRefs: pending.flatMap(p => p.sourceRefs), logMessageRef: null,
             state: { ...p.state, stopId: claim.childChainId, chainId: claim.childChainId, revision: '1', phase: 'interrupted', continuedTo: null,
-              reason: { code: 'restart-interrupted', text: 'Tiếp tục bị gián đoạn. Kiểm tra lượt chưa rõ kết quả; phần chưa chạy vẫn được giữ.' },
+              reason: { code: 'restart-interrupted', text: tr('Tiếp tục bị gián đoạn. Kiểm tra lượt chưa rõ kết quả; phần chưa chạy vẫn được giữ.') },
               turns: Math.max(ended.length, claim.dispatches.filter(d => d.state !== 'reserved').length), costUsd: knownCost, costIncomplete: true, running: [], pending: [], canContinue: false } }
         }
       })
@@ -1143,7 +1146,7 @@ function recoverChainControl(root) {
       } catch (e) { invalid = e.message }
       const interrupted = saved.state.phase === 'draining' || saved.state.phase === 'interrupted' || remaining.some(p => p.uncertain) || orphans.some(o => o.root === root)
       const view = { ...saved.state, costUsd, costIncomplete, phase: invalid ? 'unavailable' : interrupted ? 'interrupted' : 'ready',
-        reason: invalid ? { code: 'restart-interrupted', text: invalid } : interrupted ? { code: 'restart-interrupted', text: 'Chuỗi bị gián đoạn; không tự chạy lại lượt chưa rõ kết quả. Kiểm tra log và khóa cũ.' } : saved.state.reason,
+        reason: invalid ? { code: 'restart-interrupted', text: invalid } : interrupted ? { code: 'restart-interrupted', text: tr('Chuỗi bị gián đoạn; không tự chạy lại lượt chưa rõ kết quả. Kiểm tra log và khóa cũ.') } : saved.state.reason,
         pending: remaining.map(p => ({ agent: p.agent, sourceSeqs: p.sourceRefs.map(r => r.seq), taskIds: p.taskIds || [], uncertain: !!p.uncertain })),
         running: running.map(r => ({ agent: r.agent, runId: r.runId, phase: 'orphan' })),
         canContinue: !invalid && !running.length && !orphans.some(o => o.root === root) && remaining.some(p => !p.uncertain) }
@@ -1165,7 +1168,7 @@ function recoverChainControl(root) {
 }
 async function chainStopRecord(root, stop) {
   const id = stopKey(stop), store = readControlStore(root)
-  if (store.corrupted) throw gitError('UNAVAILABLE', 'File điều phối hỏng')
+  if (store.corrupted) throw gitError('UNAVAILABLE', tr('File điều phối hỏng'))
   if (store.stops[id]) {
     // The log append can be visible before haltChain saves its returned reference.
     // Bind only the matching, verified log entry, never infer that the stop is unused.
@@ -1176,13 +1179,13 @@ async function chainStopRecord(root, stop) {
     await sourceMessages(root, [readControlStore(root).stops[id].logMessageRef])
     return readControlStore(root).stops[id]
   }
-  if (stop.stopId || stop.chainId) throw gitError('UNAVAILABLE', 'Thiếu checkpoint của thẻ dừng; không cấp lại mù')
+  if (stop.stopId || stop.chainId) throw gitError('UNAVAILABLE', tr('Thiếu checkpoint của thẻ dừng; không cấp lại mù'))
   const index = await core.getLogIndex(root)
   const continued = index.records.find(r => r.kind === 'chain-continue' && r.continuedFrom === stop.seq)
-  if (continued && !continued.childChainId) throw gitError('UNAVAILABLE', 'Không thể xác định chuỗi đã tiếp tục')
+  if (continued && !continued.childChainId) throw gitError('UNAVAILABLE', tr('Không thể xác định chuỗi đã tiếp tục'))
   const pending = (stop.targets || []).map(agent => ({ agent, sourceRefs: [sourceRef(stop)], taskIds: [], uncertain: false }))
   const chain = newChain(root, { id }); chain.pending = pending; chain.state = continued ? 'continued' : 'stopped'; chain.continuedTo = continued?.childChainId
-  chain.haltReason = { code: 'restart-interrupted', text: stop.text || 'Dừng chuỗi' }
+  chain.haltReason = { code: 'restart-interrupted', text: stop.text || tr('Dừng chuỗi') }
   saveStopRecord(root, chain, stop)
   return readControlStore(root).stops[id]
 }
@@ -1213,7 +1216,7 @@ function getChainView(root, chain) {
     box: core.chatName(root),
     revision: String(chain.revision || 1),
     phase,
-    reason: chain.haltReason || { code: 'no-progress', text: 'Dừng chuỗi' },
+    reason: chain.haltReason || { code: 'no-progress', text: tr('Dừng chuỗi') },
     threshold: 3,
     idleRunIds: chain.idleRunIds ? [...chain.idleRunIds] : [],
     turns: chain.turns,
@@ -1300,7 +1303,7 @@ async function routeTargets(dir, msg, hops, chain) {
   // 1. Check cost ceiling
   if (chain.costCeiling != null && chain.costUsd >= chain.costCeiling && chain.state === 'active') {
     chain.state = 'halting'
-    chain.haltReason = { code: 'cost-ceiling', text: `Dừng chuỗi vì chi phí đã đạt USD ${chain.costCeiling.toFixed(4)}.` }
+    chain.haltReason = { code: 'cost-ceiling', text: tr('Dừng chuỗi vì chi phí đã đạt USD {cost}.', { cost: chain.costCeiling.toFixed(4) }) }
   }
 
   // 2. S2 Deduplication for agent messages
@@ -1328,7 +1331,7 @@ async function routeTargets(dir, msg, hops, chain) {
   // If all targets are duplicates, no new work to dispatch or add to pending
   if (!filteredTargets.length) {
     if ((chain.state === 'halting' || chain.state === 'stopped') && chain.pending.length > 0 && !chain.stopPosted) {
-      await haltChain(dir, chain, chain.haltReason || { code: 'no-progress', text: 'Dừng chuỗi sau 3 lượt không có tiến triển mới (chat qua lại).' }, chain.pending.map(p => ({ name: p.agent })))
+      await haltChain(dir, chain, chain.haltReason || { code: 'no-progress', text: tr('Dừng chuỗi sau {n} lượt không có tiến triển mới (chat qua lại).', { n: chain.threshold }) }, chain.pending.map(p => ({ name: p.agent })))
     }
     return
   }
@@ -1345,7 +1348,7 @@ async function routeTargets(dir, msg, hops, chain) {
       p.sourceRefs.push({ seq: msg.seq, at: msg.at, textHash: createHash('sha256').update(msg.text || '').digest('hex') })
     }
     if (!chain.stopPosted) {
-      await haltChain(dir, chain, chain.haltReason || { code: 'no-progress', text: 'Dừng chuỗi sau 3 lượt không có tiến triển mới (chat qua lại).' }, chain.pending.map(p => ({ name: p.agent })))
+      await haltChain(dir, chain, chain.haltReason || { code: 'no-progress', text: tr('Dừng chuỗi sau {n} lượt không có tiến triển mới (chat qua lại).', { n: chain.threshold }) }, chain.pending.map(p => ({ name: p.agent })))
     } else {
       saveStopRecord(root, chain)
     }
@@ -1357,7 +1360,7 @@ async function routeTargets(dir, msg, hops, chain) {
     const target = filteredTargets[i]
     if (chain.turns + chain.reservedTurns >= chain.chainLimit) {
       chain.state = 'halting'
-      chain.haltReason = { code: 'turn-limit', text: `Dừng sau ${chain.chainLimit} lượt agent liên tiếp.` }
+      chain.haltReason = { code: 'turn-limit', text: tr('Dừng sau {n} lượt agent liên tiếp.', { n: chain.chainLimit }) }
       const remaining = filteredTargets.slice(i)
       for (const rem of remaining) {
         if (rem._dedupeKey) chain.dispatchedKeys.add(rem._dedupeKey)
@@ -1381,7 +1384,7 @@ async function routeTargets(dir, msg, hops, chain) {
       await ask(dir, target, hops, null, chain, msg)
     } catch (e) {
       chain.reservedTurns = Math.max(0, chain.reservedTurns - 1)
-      await post(dir, 'system', `Chưa gọi được @${target.name}: ${e.message}`, { kind: 'route-error', agent: target.name })
+      await post(dir, 'system', tr('Chưa gọi được @{agent}: {error}', { agent: target.name, error: e.message }), { kind: 'route-error', agent: target.name })
     }
     for (const job of jobs) if (job.chain === chain && job.headStarted && !job.finished) progress(job)
   }
@@ -1417,11 +1420,11 @@ async function ask(dir, agent, hops, special = null, chain = null, trigger = nul
     return waiting
   }
   const reserved = permissionReservations.get(permissionKey(root, agent.name))
-  if (reserved && reserved.id !== grantRequestId) throw gitError('BUSY', `@${agent.name} đang cấp quyền`)
+  if (reserved && reserved.id !== grantRequestId) throw gitError('BUSY', tr('@{agent} đang cấp quyền', { agent: agent.name }))
   if (!grantRequestId) clearPending(root, agent.name)
   let setupError
   try { await ensureTrustedConfig(root) } catch (e) { setupError = e.message }
-  try { if (special?.kind !== 'summary' && !setupError) migrateTaskScope(dir) } catch (e) { if (String(agent.name).toLowerCase() === 'pm') setupError ||= `Không nâng được quyền task cho PM: ${e.message}` }
+  try { if (special?.kind !== 'summary' && !setupError) migrateTaskScope(dir) } catch (e) { if (String(agent.name).toLowerCase() === 'pm') setupError ||= tr('Không nâng được quyền task cho PM: {error}', { error: e.message }) }
   agent = core.team(dir).find(a => a.name === agent.name) || agent
   if (special?.kind === 'summary') agent = { ...agent, effort: agent.effort && 'low', resume: false, allowedCommands: [], permissions: { mode: 'edit', allowTools: [], networkAccess: false }, owns: [], readOnly: true }
   const scope = core.normalizeScope(agent, root)
@@ -1438,9 +1441,9 @@ async function ask(dir, agent, hops, special = null, chain = null, trigger = nul
   } catch {}
   if (grantRequestId) {
     const grant = permissionReservations.get(permissionKey(root, agent.name))
-    if (!grant || grant.id !== grantRequestId) throw gitError('CANCELLED', 'Thao tác cấp quyền đã bị huỷ')
+    if (!grant || grant.id !== grantRequestId) throw gitError('CANCELLED', tr('Thao tác cấp quyền đã bị huỷ'))
     if (grant.retryRevision !== core.teamRevision(root) || grant.generation !== logGenerations.get(root)
-      || grant.workspaceId !== workspace.workspaceId) throw gitError('CONFLICT', 'Dự án đã thay đổi sau khi lưu quyền')
+      || grant.workspaceId !== workspace.workspaceId) throw gitError('CONFLICT', tr('Dự án đã thay đổi sau khi lưu quyền'))
   }
   const capturedTrigger = trigger && typeof trigger.from === 'string' && typeof trigger.text === 'string' && Buffer.byteLength(trigger.text) <= 32768
     ? { from: trigger.from, text: trigger.text, ...(Number.isInteger(trigger.seq) ? { seq: trigger.seq } : {}) } : null
@@ -1450,7 +1453,7 @@ async function ask(dir, agent, hops, special = null, chain = null, trigger = nul
       allowedCommands: [...agent.allowedCommands], permissions: agent.permissions && typeof agent.permissions === 'object'
         ? { ...agent.permissions, allowTools: Array.isArray(agent.permissions.allowTools) ? [...agent.permissions.allowTools] : agent.permissions.allowTools } : agent.permissions,
       avatar: { ...agent.avatar } }, scope,
-    locks: workspace.worktree ? sharedMetadataLocks(scope, root) : core.scopeLocks(scope, root), label: 'đang xếp hàng…', phase: 'queued', blockedBy: [], stopping: false,
+    locks: workspace.worktree ? sharedMetadataLocks(scope, root) : core.scopeLocks(scope, root), label: tr('đang xếp hàng…'), phase: 'queued', blockedBy: [], stopping: false,
     finished: false, headStarted: false, reserved: false, spawned: false, pgid: null, setupError,
     controller: new AbortController(), auditController: new AbortController(), timer: null, taskIds, chain, trigger: capturedTrigger, reasons: new Set([reason]),
     retryContext, ...workspace, ...(special || {}) }
@@ -1484,11 +1487,11 @@ async function scheduleSummary(dir) {
   if (jobs.some(job => job.root === root && job.kind === 'summary') || summaryRetryAt.get(root) > Date.now()) return
   if (!core.configTrust(root).trusted) return // background work never pops the config dialog; the next agent turn will
   let batch
-  try { batch = await core.summaryBatch(root) } catch (e) { console.error('Không kiểm tra được tóm tắt:', e); return }
+  try { batch = await core.summaryBatch(root) } catch (e) { console.error('Could not check the summary:', e); return }
   if (!batch || jobs.some(job => job.root === root && job.kind === 'summary')) return
   const pm = core.team(root).find(agent => String(agent.name).toLowerCase() === 'pm')
   if (!pm) {
-    if (!summaryUnavailable.has(root)) { summaryUnavailable.add(root); await post(root, 'system', 'Không thể tự tóm tắt: nhóm chưa có PM.', { kind: 'summary-unavailable' }) }
+    if (!summaryUnavailable.has(root)) { summaryUnavailable.add(root); await post(root, 'system', tr('Không thể tự tóm tắt: nhóm chưa có PM.'), { kind: 'summary-unavailable' }) }
     return
   }
   summaryUnavailable.delete(root)
@@ -1504,7 +1507,7 @@ function startHead(job) {
   try { job.timer = setTimeout(() => stopJob(job, 'timeout'), core.timeoutMinutes(job.agent) * 60000) }
   catch (e) { return void finishWaiting(job, 'error', e.message).catch(error => console.error(error)) }
   if (job.setupError) return void finishWaiting(job, 'error', job.setupError).catch(error => console.error(error))
-  if (job.scope.scopeNeedsReview) return void finishWaiting(job, 'error', 'Cần xác nhận phạm vi file trong Cài đặt trước khi chạy').catch(error => console.error(error))
+  if (job.scope.scopeNeedsReview) return void finishWaiting(job, 'error', tr('Cần xác nhận phạm vi file trong Cài đặt trước khi chạy')).catch(error => console.error(error))
   pump()
 }
 
@@ -1546,16 +1549,16 @@ function pump() {
         const blocked = blockers(job)
         if (blocked.length) {
           job.blockedBy = blocked
-          progress(job, `chờ ${blocked[0].name} (${blocked[0].path})`)
+          progress(job, tr('chờ {agent} ({path})', { agent: blocked[0].name, path: blocked[0].path }))
           continue
         }
         job.blockedBy = []
         job.phase = 'running'
         job.reserved = true
         job.claimedAt = new Date().toISOString()
-        progress(job, 'đang kiểm tra file…')
+        progress(job, tr('đang kiểm tra file…'))
         try { persistRegistry(job.root) }
-        catch (e) { job.reserved = false; finishWaiting(job, 'error', `Không lưu được khóa: ${e.message}`).catch(error => console.error(error)); continue }
+        catch (e) { job.reserved = false; finishWaiting(job, 'error', tr('Không lưu được khóa: {error}', { error: e.message })).catch(error => console.error(error)); continue }
         claimed = true
         executeJob(job).catch(e => failJob(job, e)).catch(e => console.error(e))
       }
@@ -1568,7 +1571,7 @@ function pump() {
 
 async function failJob(job, error) {
   if (job.finished) return
-  console.error(`Lượt @${job.name} lỗi ngoài dự kiến:`, error)
+  console.error(`Turn @${job.name} failed unexpectedly:`, error)
   const result = { outcome: 'error', text: error.message, usage: zeroUsage() }
   try { await terminal(job, result); if (job.spawned) await warning(job, [], false) }
   finally {
@@ -1588,10 +1591,10 @@ async function failJob(job, error) {
 
 async function warning(job, paths, auditComplete) {
   if (auditComplete && !paths.length) return
-  const shown = paths.slice(0, 10).join(', '), more = paths.length > 10 ? ` và ${paths.length - 10} file khác` : ''
+  const shown = paths.length > 10 ? tr('{files} và {n} file khác', { files: paths.slice(0, 10).join(', '), n: paths.length - 10 }) : paths.join(', ')
   const text = auditComplete
-    ? `Phát hiện file ngoài phạm vi thay đổi trong thời gian lượt @${job.name}; chưa xác định tác nhân, có lượt khác/editor có thể đang ghi: ${shown}${more}`
-    : `Không thể kiểm tra đầy đủ thay đổi file trong thời gian lượt @${job.name}.`
+    ? tr('Phát hiện file ngoài phạm vi thay đổi trong thời gian lượt @{agent}; chưa xác định tác nhân, có lượt khác/editor có thể đang ghi: {files}', { agent: job.name, files: shown })
+    : tr('Không thể kiểm tra đầy đủ thay đổi file trong thời gian lượt @{agent}.', { agent: job.name })
   await post(job.dir, 'system', text, { kind: 'scope-warning', relatedRunId: job.runId, paths, auditComplete, attribution: 'unverified' })
 }
 
@@ -1652,10 +1655,10 @@ function recordChainTurn(job, result, changed, metadataChanged, auditComplete, b
 
   if (chain.seenProofs.size >= 8192 && chain.state === 'active') {
     chain.state = 'halting'
-    chain.haltReason = { code: 'tracking-limit', text: 'Dừng chuỗi vì đã đạt giới hạn theo dõi (8192).' }
+    chain.haltReason = { code: 'tracking-limit', text: tr('Dừng chuỗi vì đã đạt giới hạn theo dõi (8192).') }
   } else if (chain.idleStreak >= chain.threshold && chain.state === 'active') {
     chain.state = 'halting'
-    chain.haltReason = { code: 'no-progress', text: 'Dừng chuỗi sau 3 lượt không có tiến triển mới (chat qua lại).' }
+    chain.haltReason = { code: 'no-progress', text: tr('Dừng chuỗi sau {n} lượt không có tiến triển mới (chat qua lại).', { n: chain.threshold }) }
   }
 }
 function permissionCandidate(job, result) {
@@ -1692,7 +1695,7 @@ async function executeJob(job) {
       signal: job.controller.signal,
       onProgress: (label, extra) => { if (!job.stopping) progress(job, label, extra) },
       onSpawn: pid => { job.spawned = true; job.pgid = pid; persistRegistry(job.root) },
-      onSessionChanged: () => { try { emitSessions(job.root) } catch (e) { console.error('Không gửi được trạng thái phiên:', e) } },
+      onSessionChanged: () => { try { emitSessions(job.root) } catch (e) { console.error('Could not send the session state:', e) } },
       ...(job.retryContext ? { retryContext: job.retryContext } : {}),
       ...(job.initialPrompt ? { initialPrompt: job.initialPrompt } : {}),
       appContext: { continuationSources: job.continuationSources },
@@ -1702,9 +1705,9 @@ async function executeJob(job) {
   if (job.spawned && !result.orphanState) {
     job.phase = 'checking'
     job.stopping = false
-    progress(job, 'đang kiểm tra file…')
+    progress(job, tr('đang kiểm tra file…'))
     try {
-      if (!before) throw new Error('Không có snapshot ban đầu')
+      if (!before) throw new Error(tr('Không có snapshot ban đầu'))
       const after = await core.snapshot(job.cwd || job.root, { signal: job.auditController.signal, excludeChat: job.worktree })
       afterContentKey = computeContentKey(after, job.scope, job.root)
       if (job.chain && afterContentKey) job.chain.currentContentKey = afterContentKey
@@ -1714,7 +1717,7 @@ async function executeJob(job) {
       const settled = snap => ![...snap.values()].some(value => value.startsWith('changing:'))
       if (!settled(before) || !settled(after)) auditComplete = false
       if (job.worktree) {
-        if (!metadataBefore) throw new Error('Không có snapshot metadata ban đầu')
+        if (!metadataBefore) throw new Error(tr('Không có snapshot metadata ban đầu'))
         const metadataAfter = await core.snapshot(job.root, { signal: job.auditController.signal, onlyChat: true })
         metadataChanged = core.changedPaths(metadataBefore, metadataAfter)
         if (!settled(metadataBefore) || !settled(metadataAfter)) auditComplete = false
@@ -1732,7 +1735,7 @@ async function executeJob(job) {
     } catch { auditComplete = false }
     if (job.auditController.signal.aborted) {
       result.outcome = 'stopped'
-      result.text = '(đã dừng khi kiểm tra file)'
+      result.text = tr('(đã dừng khi kiểm tra file)')
       result.usage.partial = true
       auditComplete = false
     }
@@ -1744,15 +1747,15 @@ async function executeJob(job) {
   if (job.kind === 'summary') {
     try {
       if (result.outcome === 'success') {
-        if (result.emptyResponse) throw new Error('PM không trả nội dung tóm tắt')
+        if (result.emptyResponse) throw new Error(tr('PM không trả nội dung tóm tắt'))
         const summary = await core.acceptSummary(job.root, job.summaryBatch, result.text, job.runId)
         result.logExtra = { kind: 'summary', summary }
-        result.text = `Đã cập nhật [tóm tắt lịch sử](${core.chatName(job.root)}/summary.md) đến tin ${summary.through}.`
+        result.text = tr('Đã cập nhật [tóm tắt lịch sử]({chat}/summary.md) đến tin {n}.', { chat: core.chatName(job.root), n: summary.through })
       }
       msg = await terminal(job, result)
       if (result.logExtra?.summary) {
         try { core.materializeSummary(job.root, result.logExtra.summary); notifyProjectChanged(job.root, { files: true, file: `${core.chatName(job.root)}/summary.md` }) }
-        catch (e) { console.error('Không ghi được summary.md; sẽ khôi phục khi mở box:', e) }
+        catch (e) { console.error('Could not write summary.md; it is restored when the box opens:', e) }
       }
       if (job.spawned) await warning(job, paths, auditComplete)
     } catch (e) {
@@ -1768,11 +1771,11 @@ async function executeJob(job) {
 
   if (result.outcome === 'success') {
     const parsed = core.parseTaskStatusBlock(result.text)
-    if (parsed.error || parsed.changes) result.text = parsed.text || '(không có phản hồi)'
+    if (parsed.error || parsed.changes) result.text = parsed.text || tr('(không có phản hồi)')
     if (parsed.error) taskError = parsed.error
     else if (parsed.changes) parsedTaskChanges = parsed.changes
     const handoff = core.parseHandoffBlock(result.text)
-    if (handoff.requested) result.text = handoff.text || '(không có phản hồi)'
+    if (handoff.requested) result.text = handoff.text || tr('(không có phản hồi)')
     if (handoff.error) handoffError = handoff.error
     else if (handoff.handoff) try { core.writeHandoff(job.root, job.name, job.workspaceId || null, job.runId, handoff.handoff) }
       catch (e) { handoffError = e.message }
@@ -1792,28 +1795,28 @@ async function executeJob(job) {
     if (workspace?.queuedEntryId || core.projectSettings(job.root).settings.worktreesEnabled) pumpMerge(job.root).catch(e => console.error(e))
 
     if (result.taskUpdates?.length) {
-      const changes = result.taskUpdates.map(update => `${update.id} sang ${TASK_STATUS_LABELS[update.status]}`).join('; ')
-      await post(job.dir, 'system', `${job.name} chuyển ${changes}.`, { kind: 'task-status-note', relatedRunId: job.runId })
+      const changes = result.taskUpdates.map(update => tr('{id} sang {status}', { id: update.id, status: tr(TASK_STATUS_LABELS[update.status]) })).join('; ')
+      await post(job.dir, 'system', tr('{agent} chuyển {changes}.', { agent: job.name, changes }), { kind: 'task-status-note', relatedRunId: job.runId })
       notifyProjectChanged(job.root, { tasks: true })
     }
-    if (taskError) await post(job.dir, 'system', `Không cập nhật được task: ${taskError}`, { kind: 'task-status-error', relatedRunId: job.runId })
-    if (handoffError) await post(job.dir, 'system', `Không lưu được bàn giao: ${handoffError}`, { kind: 'handoff-error', relatedRunId: job.runId })
+    if (taskError) await post(job.dir, 'system', tr('Không cập nhật được task: {error}', { error: taskError }), { kind: 'task-status-error', relatedRunId: job.runId })
+    if (handoffError) await post(job.dir, 'system', tr('Không lưu được bàn giao: {error}', { error: handoffError }), { kind: 'handoff-error', relatedRunId: job.runId })
     if (result.sessionRotation) {
-      const handoff = result.sessionRotation.handoffStatus === 'missing' ? ' Không có bàn giao hợp lệ từ lượt trước.'
-        : result.sessionRotation.handoffStatus === 'older' ? ' Dùng bàn giao từ lượt cũ hơn.' : ''
-      const tokens = result.sessionRotation.contextInputTokens?.toLocaleString('vi-VN') ?? 0
-      const limit = result.sessionRotation.limit?.toLocaleString('vi-VN') ?? 0
-      await post(job.dir, 'system', `${job.name} mở phiên mới: ngữ cảnh bước cuối lượt trước ${tokens} token, vượt ngưỡng ${limit}.${handoff}`,
+      const handoff = result.sessionRotation.handoffStatus === 'missing' ? tr(' Không có bàn giao hợp lệ từ lượt trước.')
+        : result.sessionRotation.handoffStatus === 'older' ? tr(' Dùng bàn giao từ lượt cũ hơn.') : ''
+      const tokens = result.sessionRotation.contextInputTokens?.toLocaleString(i18n.locale()) ?? 0
+      const limit = result.sessionRotation.limit?.toLocaleString(i18n.locale()) ?? 0
+      await post(job.dir, 'system', tr('{agent} mở phiên mới: ngữ cảnh bước cuối lượt trước {tokens} token, vượt ngưỡng {limit}.', { agent: job.name, tokens, limit }) + handoff,
         { kind: 'session-rotated', relatedRunId: job.runId, contextInputTokens: result.sessionRotation.contextInputTokens, limit: result.sessionRotation.limit })
     }
-    if (workspaceError) await post(job.dir, 'system', `Không thể tạo commit cho @${job.name}: ${workspaceError.message}`,
+    if (workspaceError) await post(job.dir, 'system', tr('Không thể tạo commit cho @{agent}: {error}', { agent: job.name, error: workspaceError.message }),
       { kind: 'merge', owner: job.name, relatedRunId: job.runId, error: { code: workspaceError.code || 'GIT_ERROR', message: workspaceError.message,
         files: workspaceError.files || [], log: '' } })
     if (job.spawned) await warning(job, paths, auditComplete)
     recordChainTurn(job, result, changed, metadataChanged, auditComplete, beforeContentKey, afterContentKey)
     if (result.permissionDenials?.length) {
       pendingPermission = permissionCandidate(job, result)
-      await post(job.dir, 'system', `${job.name} bị từ chối quyền: ${result.permissionDenials.map(denial => denial.label).join('; ')}`,
+      await post(job.dir, 'system', tr('{agent} bị từ chối quyền: {denials}', { agent: job.name, denials: result.permissionDenials.map(denial => denial.label).join('; ') }),
         { kind: 'permission-denied', relatedRunId: job.runId, agent: job.name, cli: job.agent.cli, workspaceId: job.workspaceId || null,
           permissionRequestId: pendingPermission?.id || null, denials: result.permissionDenials })
     }
@@ -1857,13 +1860,13 @@ function persistRegistry(root) {
 }
 function releaseReservation(job) {
   job.reserved = false
-  try { persistRegistry(job.root) } catch (e) { console.error('Không cập nhật được locks.json:', e) }
+  try { persistRegistry(job.root) } catch (e) { console.error('Could not update locks.json:', e) }
 }
 function keepOrphan(job, state) {
   job.reserved = false
   orphans.push({ dir: job.dir, root: job.root, runId: job.runId, name: job.name, scope: job.scope, locks: job.locks,
     pgid: job.pgid, startedAt: job.claimedAt, state, workspaceId: job.workspaceId || null, kind: job.kind || 'agent', cwd: job.cwd || job.root })
-  try { persistRegistry(job.root) } catch (e) { console.error('Không lưu được khóa còn sống:', e) }
+  try { persistRegistry(job.root) } catch (e) { console.error('Could not save the live locks:', e) }
   sendLocks(job.root)
   scheduleOrphanProbe()
 }
@@ -1878,7 +1881,7 @@ function orphanState(pgid) {
   if (!Number.isInteger(pgid) || pgid <= 0) return 'unknown'
   try { return core.groupAlive(pgid) ? 'alive' : 'dead' } catch { return 'unknown' }
 }
-function unknownOrphan(dir, root, name = 'agent cũ') {
+function unknownOrphan(dir, root, name = tr('agent cũ')) {
   return { dir, root, runId: randomUUID(), name, scope: { owns: [], readOnly: false }, locks: [{ path: root, tree: true }],
     pgid: null, startedAt: null, state: 'unknown' }
 }
@@ -1887,7 +1890,7 @@ function pauseInterruptedMerge(root, queueId) {
   try { registry = readWorktrees(root) } catch { return }
   const entry = registry.queue.find(item => item.id === queueId)
   if (!entry || !['merging', 'checking', 'publishing'].includes(entry.state)) return
-  mergeError(entry, 'PAUSED', 'App đã khởi động lại trước khi hoàn tất gộp; hãy thử lại')
+  mergeError(entry, 'PAUSED', tr('App đã khởi động lại trước khi hoàn tất gộp; hãy thử lại'))
   writeWorktrees(root, registry)
   removeIntegration(root, entry).catch(() => {})
 }
@@ -1935,7 +1938,7 @@ function loadOrphans(dir) {
     for (const entry of readWorktrees(root).queue)
       if (['merging', 'checking', 'publishing'].includes(entry.state) && !active.has(entry.id)) pauseInterruptedMerge(root, entry.id)
   } catch {}
-  try { persistRegistry(root) } catch (e) { console.error('Không chuẩn hóa được locks.json:', e) }
+  try { persistRegistry(root) } catch (e) { console.error('Could not normalize locks.json:', e) }
   scheduleOrphanProbe()
 }
 function sendLocks(root) {
@@ -1992,9 +1995,9 @@ async function refreshLog(root) {
 function viewerRoot(root, workspaceId, href = '') {
   if (!workspaceId || isChatPath(String(href).split(/[?#]/, 1)[0])) return root
   const record = readWorktrees(root).agents.find(item => item.id === workspaceId)
-  if (!record) throw gitError('INVALID_ARGUMENT', 'Workspace không còn tồn tại')
+  if (!record) throw gitError('INVALID_ARGUMENT', tr('Workspace không còn tồn tại'))
   const expected = managedPath(root, 'agents', record.id)
-  if (path.resolve(record.path) !== expected || !fs.existsSync(expected)) throw gitError('CONFIG_ERROR', 'Workspace không hợp lệ')
+  if (path.resolve(record.path) !== expected || !fs.existsSync(expected)) throw gitError('CONFIG_ERROR', tr('Workspace không hợp lệ'))
   return expected
 }
 
@@ -2045,18 +2048,18 @@ function watchProject(dir, file = null, workspaceId = null) {
         const name = filename == null ? null : String(filename), changed = { tasks: false, files: false, file: null }
         if (roles.has('chat') && (name == null || name === 'tasks.json')) changed.tasks = true
         if (roles.has('chat') && (name == null || name === 'log.jsonl') && Date.now() > (appLogWrites.get(root) || 0))
-          refreshLog(root).catch(e => notifyProjectChanged(root, { error: `Đọc lại lịch sử lỗi: ${e.message}` }))
+          refreshLog(root).catch(e => notifyProjectChanged(root, { error: tr('Đọc lại lịch sử lỗi: {error}', { error: e.message }) }))
         if (roles.has('reports')) changed.files = true
         if (current && roles.has('file') && (name == null || path.resolve(folder, name) === current.real)) changed.file = current.relative
         if (changed.tasks || changed.files || changed.file) notifyProjectChanged(root, changed)
       })
-      watcher.on('error', e => notifyProjectChanged(root, { error: `Theo dõi file lỗi: ${e.message}` }))
+      watcher.on('error', e => notifyProjectChanged(root, { error: tr('Theo dõi file lỗi: {error}', { error: e.message }) }))
       watched.watchers.push(watcher)
     }
     return { ok: true }
   } catch (e) {
     clearProjectWatch()
-    return { ok: false, message: `Không theo dõi được dự án: ${e.message}` }
+    return { ok: false, message: tr('Không theo dõi được dự án: {error}', { error: e.message }) }
   }
 }
 
@@ -2069,14 +2072,14 @@ function ensureTrustedConfig(root) {
   const check = core.configTrust(root)
   if (check.trusted) { trustDeclined.delete(root); return Promise.resolve() }
   const changes = check.changes.join('\n'), files = `${core.chatName(root)}/agents.json, project.json`
-  const untrusted = () => gitError('CONFIG_UNTRUSTED', `Cấu hình (${files}) chưa được xác nhận. Gửi tin mới để được hỏi lại.`)
+  const untrusted = () => gitError('CONFIG_UNTRUSTED', tr('Cấu hình ({files}) chưa được xác nhận. Gửi tin mới để được hỏi lại.', { files }))
   if (!check.pinned && trustDeclined.get(root) === changes) return Promise.reject(untrusted())
   if (!trustPrompts.has(root)) trustPrompts.set(root, (async () => {
     const answer = await dialog.showMessageBox(win, { type: 'warning', defaultId: 0, cancelId: 0,
-      buttons: check.pinned ? ['Hoàn tác thay đổi', 'Chấp nhận thay đổi'] : ['Huỷ', 'Tin cậy cấu hình này'],
-      message: check.pinned ? `Cấu hình box «${path.basename(root)}» đã bị sửa ngoài app` : `Box «${path.basename(root)}» có cấu hình app chưa xác nhận`,
-      detail: `${changes}\n\n${check.pinned ? 'Nếu không phải bạn sửa, có thể agent đã tự đổi quyền, lệnh hoặc phạm vi của mình.'
-        : 'Cấu hình này không do app tạo (repo có sẵn, box cũ trước bản cập nhật, hoặc agent tạo). Chỉ tin nếu bạn đã kiểm tra.'}` })
+      buttons: check.pinned ? [tr('Hoàn tác thay đổi'), tr('Chấp nhận thay đổi')] : [tr('Huỷ'), tr('Tin cậy cấu hình này')],
+      message: check.pinned ? tr('Cấu hình box «{box}» đã bị sửa ngoài app', { box: path.basename(root) }) : tr('Box «{box}» có cấu hình app chưa xác nhận', { box: path.basename(root) }),
+      detail: `${changes}\n\n${check.pinned ? tr('Nếu không phải bạn sửa, có thể agent đã tự đổi quyền, lệnh hoặc phạm vi của mình.')
+        : tr('Cấu hình này không do app tạo (repo có sẵn, box cũ trước bản cập nhật, hoặc agent tạo). Chỉ tin nếu bạn đã kiểm tra.')}` })
     if (answer.response === 1) core.trustConfig(root, check.texts)
     else if (check.pinned) core.revertConfig(root)
     else { trustDeclined.set(root, changes); throw untrusted() }
@@ -2088,9 +2091,9 @@ function ensureTrustedConfig(root) {
 }
 
 function knownProject(dir) {
-  if (typeof dir !== 'string') throw new Error('Dự án không hợp lệ')
+  if (typeof dir !== 'string') throw new Error(tr('Dự án không hợp lệ'))
   const root = rootOf(dir)
-  if (!projects().some(p => { try { return rootOf(p) === root } catch { return false } })) throw new Error('Dự án chưa được mở trong app')
+  if (!projects().some(p => { try { return rootOf(p) === root } catch { return false } })) throw new Error(tr('Dự án chưa được mở trong app'))
   return root
 }
 function agentSessionContext(root, name) {
@@ -2129,12 +2132,12 @@ function guardTeamChange(root, before, next) {
       || old.readOnly !== changed.readOnly || JSON.stringify(old.owns) !== JSON.stringify(changed.owns)
       || JSON.stringify(old.allowedCommands) !== JSON.stringify(changed.allowedCommands)
       || JSON.stringify(old.permissions) !== JSON.stringify(changed.permissions))
-      throw gitError('BUSY', `Không thể đổi tên, xoá, CLI, nhớ phiên, phạm vi, lệnh hoặc quyền của @${active.name} khi còn lượt/khóa`)
+      throw gitError('BUSY', tr('Không thể đổi tên, xoá, CLI, nhớ phiên, phạm vi, lệnh hoặc quyền của @{agent} khi còn lượt/khóa', { agent: active.name }))
   }
   if (permissionReservations.size && [...permissionReservations.keys()].some(key => key.startsWith(root + '\0')))
-    throw gitError('BUSY', 'Đang có thao tác cấp quyền')
+    throw gitError('BUSY', tr('Đang có thao tác cấp quyền'))
   if (core.projectSettings(root).settings.worktreesEnabled) for (const workspace of readWorktrees(root).agents)
-    if (!next.some(agent => agent.name === workspace.agent)) throw gitError('BUSY', `Không thể đổi tên hoặc xoá @${workspace.agent} khi agent còn workspace`)
+    if (!next.some(agent => agent.name === workspace.agent)) throw gitError('BUSY', tr('Không thể đổi tên hoặc xoá @{agent} khi agent còn workspace', { agent: workspace.agent }))
 }
 function fullEscalations(before, next) {
   return next.filter(agent => agent.permissions.mode === 'full' && (() => {
@@ -2145,19 +2148,19 @@ function fullEscalations(before, next) {
 function resolveFile(dir, input, workspaceId = null) {
   const root = knownProject(dir)
   const decoded = core.decodedPath(input)
-  if (decoded.split('/').includes('..')) throw new Error('Đường dẫn không được chứa ..')
+  if (decoded.split('/').includes('..')) throw new Error(tr('Đường dẫn không được chứa ..'))
   const file = core.resolveProjectFile(viewerRoot(root, workspaceId, decoded), input)
-  if (!file.canOpenExternal) throw new Error('Không hỗ trợ mở trực tiếp file này')
+  if (!file.canOpenExternal) throw new Error(tr('Không hỗ trợ mở trực tiếp file này'))
   return file.real
 }
 
 const validSender = event => {
   if (event.sender !== win?.webContents || (win?.webContents?.mainFrame && event.senderFrame !== win.webContents.mainFrame))
-    throw new Error('Nguồn IPC không hợp lệ')
+    throw new Error(tr('Nguồn IPC không hợp lệ'))
 }
 const apiError = error => {
-  const detail = redactManagedPath(error.message || 'Thao tác thất bại')
-  const message = error.permissionSaved ? `Đã lưu quyền nhưng chưa chạy lại: ${detail}` : detail
+  const detail = redactManagedPath(error.message || tr('Thao tác thất bại'))
+  const message = error.permissionSaved ? tr('Đã lưu quyền nhưng chưa chạy lại: {error}', { error: detail }) : detail
   return { ok: false, error: { code: error.code || 'IO_ERROR', message, ...(error.permissionSaved ? { permissionSaved: true } : {}) } }
 }
 const apiCall = async action => { try { return { ok: true, ...await action() } } catch (e) { return apiError(e) } }
@@ -2279,7 +2282,7 @@ async function handleAgentPreview(request) {
   const doRead = async () => {
     try {
       const limit = isCss ? 2 * 1024 * 1024 : 10 * 1024 * 1024
-      const readRes = await core.readBoundedFile(fileInfo, limit, isCss ? 'CSS vượt quá 2 MiB' : 'Ảnh vượt quá 10 MiB')
+      const readRes = await core.readBoundedFile(fileInfo, limit, isCss ? tr('CSS vượt quá 2 MiB') : tr('Ảnh vượt quá 10 MiB'))
       return readRes
     } finally {
       current.pendingBytes -= fileSize
@@ -2309,12 +2312,12 @@ async function handleAgentPreview(request) {
   if (isCss) {
     if (bytes.some(b => b < 32 && b !== 9 && b !== 10 && b !== 13)) {
       if (isNewPath) current.resourcePaths.delete(relative)
-      return plain('CSS không phải UTF-8 hợp lệ', 400)
+      return plain(tr('CSS không phải UTF-8 hợp lệ'), 400)
     }
     try { new TextDecoder('utf-8', { fatal: true }).decode(bytes) }
     catch {
       if (isNewPath) current.resourcePaths.delete(relative)
-      return plain('CSS không phải UTF-8 hợp lệ', 400)
+      return plain(tr('CSS không phải UTF-8 hợp lệ'), 400)
     }
   }
 
@@ -2323,11 +2326,11 @@ async function handleAgentPreview(request) {
     const detectedType = core.imageType(bytes)
     if (!detectedType) {
       if (isNewPath) current.resourcePaths.delete(relative)
-      return plain('File không phải ảnh hợp lệ', 415)
+      return plain(tr('File không phải ảnh hợp lệ'), 415)
     }
     if (core.IMAGE_EXTENSIONS[ext] !== detectedType) {
       if (isNewPath) current.resourcePaths.delete(relative)
-      return plain('File không đúng định dạng ảnh', 415)
+      return plain(tr('File không đúng định dạng ảnh'), 415)
     }
     mime = core.IMAGE_MIME[detectedType]
   } else {
@@ -2358,11 +2361,11 @@ function assertIdle(root) {
   if ([...jobs, ...orphans].some(x => x.root === root) || mergeWorkers.has(root) || mergeControllers.has(root) || gitLocks.has(root) || routing.has(root)
     || [...permissionReservations.keys()].some(key => key.startsWith(root + '\0'))) {
     const current = core.boxes(root).find(box => box.chat === core.chatName(root))?.name || path.basename(root)
-    throw new Error(`Box «${current}» cùng thư mục còn agent đang chạy hoặc khóa cũ. Chờ xong (hoặc mở lại box đó để Dừng) rồi chuyển.`)
+    throw new Error(tr('Box «{box}» cùng thư mục còn agent đang chạy hoặc khóa cũ. Chờ xong (hoặc mở lại box đó để Dừng) rồi chuyển.', { box: current }))
   }
 }
 function switchBox(root, name) {
-  if (!core.boxes(root).some(box => box.chat === name)) throw new Error('Box không còn tồn tại')
+  if (!core.boxes(root).some(box => box.chat === name)) throw new Error(tr('Box không còn tồn tại'))
   assertIdle(root)
   if (activePreview && activePreview.root === root) closeCurrentPreview()
   clearPending(root); loadedRoots.delete(root); summaryUnavailable.delete(root)
@@ -2394,7 +2397,7 @@ ipcMain.handle('projects', async event => {
 ipcMain.handle('timeline', (event, dir, since) => {
   validSender(event)
   return apiCall(async () => {
-    if (!Number.isFinite(since) || since < 0) throw gitError('INVALID_ARGUMENT', 'Khoảng thời gian không hợp lệ')
+    if (!Number.isFinite(since) || since < 0) throw gitError('INVALID_ARGUMENT', tr('Khoảng thời gian không hợp lệ'))
     return await core.timeline(knownProject(dir), since)
   })
 })
@@ -2403,7 +2406,7 @@ ipcMain.handle('dismissNeed', (event, dir, key) => {
   validSender(event)
   return apiCall(async () => {
     const root = knownProject(dir)
-    if (typeof key !== 'string' || !/^\d+:[\w.:+-]{1,40}$/.test(key)) throw gitError('INVALID_ARGUMENT', 'Mục không hợp lệ')
+    if (typeof key !== 'string' || !/^\d+:[\w.:+-]{1,40}$/.test(key)) throw gitError('INVALID_ARGUMENT', tr('Mục không hợp lệ'))
     const keys = [...dismissedNeeds(root), key].slice(-500) // loads the store before it's indexed
     needsDismissed[core.chat(root)] = keys
     core.atomicWrite(needsFile(), JSON.stringify(needsDismissed))
@@ -2422,10 +2425,10 @@ ipcMain.handle('pick', async event => {
   const dir = rootOf(picked), existing = core.boxes(dir)
   if (!chat && existing.length) {
     const current = existing.find(box => box.chat === core.chatName(dir)) || existing[0]
-    const answer = await dialog.showMessageBox(win, { type: 'question', buttons: ['Huỷ', 'Mở box có sẵn', 'Tạo box mới'], defaultId: 2, cancelId: 0,
-      message: `Thư mục này đã có box: ${existing.map(box => box.name).join(', ')}`,
-      detail: 'Box mới có lịch sử chat, memory, task và phiên agent riêng, không đụng tới box cũ.',
-      checkboxLabel: `Box mới dùng lại thành viên của «${current.name}»`, checkboxChecked: true })
+    const answer = await dialog.showMessageBox(win, { type: 'question', buttons: [tr('Huỷ'), tr('Mở box có sẵn'), tr('Tạo box mới')], defaultId: 2, cancelId: 0,
+      message: tr('Thư mục này đã có box: {boxes}', { boxes: existing.map(box => box.name).join(', ') }),
+      detail: tr('Box mới có lịch sử chat, memory, task và phiên agent riêng, không đụng tới box cũ.'),
+      checkboxLabel: tr('Box mới dùng lại thành viên của «{box}»', { box: current.name }), checkboxChecked: true })
     if (answer.response === 0) return null
     chat = current.chat
     if (answer.response === 2) {
@@ -2438,7 +2441,7 @@ ipcMain.handle('pick', async event => {
   // git repo: keep .chat2… out of `git status`, or the folder looks dirty and worktree merges stop (not a repo → no-op)
   if (chat && chat !== '.chat') await ensureRuntimeExclude(dir).catch(() => {})
   loadOrphans(dir)
-  try { migrateTaskScope(dir) } catch (e) { console.error('Không migrate được quyền task:', e) }
+  try { migrateTaskScope(dir) } catch (e) { console.error('Could not migrate the task permissions:', e) }
   fs.writeFileSync(projectsFile(), JSON.stringify([dir, ...projects().filter(d => d !== dir)]))
   return { dir, chat: core.chatName(dir) }
 })
@@ -2447,9 +2450,9 @@ ipcMain.handle('open', async (event, dir, chat = null) => {
   const root = knownProject(dir)
   if (chat != null && chat !== core.chatName(root)) switchBox(root, chat) // no chat = stay in the open box (refreshes)
   core.init(root); loadOrphans(root)
-  await recoverChainControl(root).catch(e => console.error('Không khôi phục được điều phối:', e.message))
-  try { migrateTaskScope(root) } catch (e) { console.error('Không migrate được quyền task:', e) }
-  await core.recoverSummary(root).catch(e => console.error('Không khôi phục được summary.md:', e))
+  await recoverChainControl(root).catch(e => console.error('Could not recover the chain control:', e.message))
+  try { migrateTaskScope(root) } catch (e) { console.error('Could not migrate the task permissions:', e) }
+  await core.recoverSummary(root).catch(e => console.error('Could not recover summary.md:', e))
   const history = await core.logPage(root), index = await core.getLogIndex(root), config = core.projectSettings(root)
   logGenerations.set(root, index.generation)
   scheduleSummary(root).catch(e => console.error(e))
@@ -2465,14 +2468,14 @@ ipcMain.handle('saveProjectSettings', (event, dir, request) => {
   validSender(event)
   return apiCall(async () => {
     const root = knownProject(dir)
-    if (!request || typeof request !== 'object') throw Object.assign(new Error('Yêu cầu cấu hình không hợp lệ'), { code: 'INVALID_ARGUMENT' })
+    if (!request || typeof request !== 'object') throw Object.assign(new Error(tr('Yêu cầu cấu hình không hợp lệ')), { code: 'INVALID_ARGUMENT' })
     const current = core.projectSettings(root), nextSettings = core.normalizeProjectSettings(request.settings)
-    if (request.expectedRevision !== current.revision) throw gitError('CONFLICT', 'Cấu hình đã thay đổi, hãy tải lại')
+    if (request.expectedRevision !== current.revision) throw gitError('CONFLICT', tr('Cấu hình đã thay đổi, hãy tải lại'))
     const togglesWorktrees = nextSettings.worktreesEnabled !== current.settings.worktreesEnabled
       || JSON.stringify(nextSettings.mergeChecks) !== JSON.stringify(current.settings.mergeChecks)
     if (togglesWorktrees && ([...jobs, ...orphans].some(item => item.root === root) || mergeControllers.has(root) || mergeWorkers.has(root)
       || [...permissionReservations.keys()].some(key => key.startsWith(root + '\0'))))
-      throw gitError('BUSY', 'Đang có lượt, khóa hoặc kiểm tra gộp; chưa thể đổi cấu hình worktree')
+      throw gitError('BUSY', tr('Đang có lượt, khóa hoặc kiểm tra gộp; chưa thể đổi cấu hình worktree'))
     if (!current.settings.worktreesEnabled && nextSettings.worktreesEnabled) await enableWorktrees(root, nextSettings)
     if (current.settings.worktreesEnabled && !nextSettings.worktreesEnabled) {
       const registry = readWorktrees(root)
@@ -2503,13 +2506,13 @@ ipcMain.handle('retryMerge', (event, dir, request) => {
     await withGitLock(root, async () => {
       const registry = readWorktrees(root), old = registry.queue.find(entry => entry.id === request?.queueId)
       if (old?.supersededBy) return
-      if (!old || !RETRYABLE_MERGE_STATES.includes(old.state)) throw gitError('INVALID_ARGUMENT', 'Mục gộp không thể thử lại')
+      if (!old || !RETRYABLE_MERGE_STATES.includes(old.state)) throw gitError('INVALID_ARGUMENT', tr('Mục gộp không thể thử lại'))
       const probe = await repoProbe(root)
       if (probe.branch === registry.targetRef
         && await contained(root, old.headSha, registry.agents.find(item => item.id === old.workspaceId), probe.sha)) return
       const workspace = registry.agents.find(item => item.id === old.workspaceId)
-      if (!workspace) throw gitError('CONFIG_ERROR', 'Workspace không còn tồn tại')
-      if (workspace.recoveryPending) throw gitError('BUSY', 'Hãy hoàn tất thao tác Lấy main trước khi thử gộp lại')
+      if (!workspace) throw gitError('CONFIG_ERROR', tr('Workspace không còn tồn tại'))
+      if (workspace.recoveryPending) throw gitError('BUSY', tr('Hãy hoàn tất thao tác Lấy main trước khi thử gộp lại'))
       const headSha = await gitHead(await verifyWorkspace(root, workspace)), settings = core.projectSettings(root).settings
       const id = randomUUID()
       updateRegistry(root, latest => {
@@ -2548,14 +2551,14 @@ ipcMain.handle('stopMerge', (event, dir, request) => {
   validSender(event)
   return apiCall(async () => {
     const root = knownProject(dir), registry = readWorktrees(root), entry = registry.queue.find(item => item.id === request?.queueId)
-    if (!entry) throw gitError('INVALID_ARGUMENT', 'Không tìm thấy mục gộp')
+    if (!entry) throw gitError('INVALID_ARGUMENT', tr('Không tìm thấy mục gộp'))
     if (entry.state === 'queued') await withGitLock(root, async () => {
       const latest = readWorktrees(root), pending = latest.queue.find(item => item.id === entry.id)
-      if (pending?.state !== 'queued') throw gitError('BUSY', 'Mục gộp không còn ở trạng thái chờ')
-      mergeError(pending, 'PAUSED', 'Đã dừng trước khi kiểm tra'); writeWorktrees(root, latest)
+      if (pending?.state !== 'queued') throw gitError('BUSY', tr('Mục gộp không còn ở trạng thái chờ'))
+      mergeError(pending, 'PAUSED', tr('Đã dừng trước khi kiểm tra')); writeWorktrees(root, latest)
     })
     else if (entry.state === 'checking' && mergeControllers.get(root)?.entry.id === entry.id) mergeControllers.get(root).controller.abort('stopped')
-    else throw gitError('BUSY', 'Không thể dừng trong bước Git hiện tại')
+    else throw gitError('BUSY', tr('Không thể dừng trong bước Git hiện tại'))
     return { state: await emitWorktreeState(root) }
   })
 })
@@ -2567,7 +2570,7 @@ ipcMain.handle('requestMergeRepair', (event, dir, request) => {
     let actionKey, entryId, repairChainId, repairEventId, targetEventId, owner, detail, repairContext
     await withGitLock(root, async () => {
       const registry = readWorktrees(root), entry = registry.queue.find(item => item.id === request?.queueId)
-      if (!entry) throw gitError('INVALID_ARGUMENT', 'Không tìm thấy mục gộp')
+      if (!entry) throw gitError('INVALID_ARGUMENT', tr('Không tìm thấy mục gộp'))
       actionKey = 'repair:' + (entry.mergeEvent?.eventId || entry.id)
       const store = readControlStore(root)
       if (store.claims[actionKey]) {
@@ -2580,15 +2583,15 @@ ipcMain.handle('requestMergeRepair', (event, dir, request) => {
         preResult = { runId: existing.runId }
         return
       }
-      if (entry.supersededBy) throw gitError('INVALID_ARGUMENT', 'Mục gộp đã bị thay thế')
+      if (entry.supersededBy) throw gitError('INVALID_ARGUMENT', tr('Mục gộp đã bị thay thế'))
       const probe = await repoProbe(root).catch(() => null)
       if (probe?.branch === registry.targetRef && await contained(root, entry.headSha, registry.agents.find(item => item.id === entry.workspaceId), probe.sha)) {
-        throw gitError('INVALID_ARGUMENT', 'Mục gộp đã nằm trong main')
+        throw gitError('INVALID_ARGUMENT', tr('Mục gộp đã nằm trong main'))
       }
       if (!['conflict', 'check-failed'].includes(entry.state))
-        throw gitError('INVALID_ARGUMENT', 'Mục gộp không còn cần agent sửa')
+        throw gitError('INVALID_ARGUMENT', tr('Mục gộp không còn cần agent sửa'))
       owner = core.team(root).find(agent => agent.name === entry.agent)
-      if (!owner) throw gitError('CONFIG_ERROR', 'Không tìm thấy agent sở hữu nhánh')
+      if (!owner) throw gitError('CONFIG_ERROR', tr('Không tìm thấy agent sở hữu nhánh'))
       entryId = entry.id
       repairChainId = randomUUID()
       repairEventId = actionKey
@@ -2604,7 +2607,7 @@ ipcMain.handle('requestMergeRepair', (event, dir, request) => {
           at: new Date().toISOString()
         }
       })
-      detail = `${entry.error?.message || 'Lỗi gộp'}${entry.error?.files?.length ? `: ${entry.error.files.join(', ')}` : ''}`
+      detail = `${entry.error?.message || tr('Lỗi gộp')}${entry.error?.files?.length ? `: ${entry.error.files.join(', ')}` : ''}`
       repairContext = entry.mergeEvent ? {
         category: entry.mergeEvent.category,
         phase: entry.mergeEvent.phase,
@@ -2619,7 +2622,7 @@ ipcMain.handle('requestMergeRepair', (event, dir, request) => {
     })
     if (preResult) return preResult
 
-    await postOnce(root, repairEventId, 'system', `@${owner.name} sửa lỗi trên nhánh của bạn rồi báo lại: ${detail}`, {
+    await postOnce(root, repairEventId, 'system', tr('@{agent} sửa lỗi trên nhánh của bạn rồi báo lại: {error}', { agent: owner.name, error: detail }), {
       kind: 'merge-repair', initiatedBy: 'user', queueId: entryId, eventId: repairEventId, targetEventId
     })
     const chain = newChain(root, { id: repairChainId })
@@ -2650,24 +2653,24 @@ ipcMain.handle('continueChain', (event, dir, request) => {
       const prior = readControlStore(root).claims[claimKey]
       if (prior || record.state.phase === 'continued') {
         const childId = prior?.childChainId || record.state.continuedTo
-        if (!childId) throw gitError('UNAVAILABLE', 'Không thể xác định chuỗi đã tiếp tục')
+        if (!childId) throw gitError('UNAVAILABLE', tr('Không thể xác định chuỗi đã tiếp tục'))
         return { chainId: childId, alreadyContinued: true, state: record.state }
       }
       const origin = activeChains.get(record.chainId)
       const view = origin ? getChainView(root, origin) : record.state
-      if (!view.canContinue || view.phase === 'draining' || orphans.some(o => o.root === root)) throw gitError('INVALID_STATE', 'Chưa thể tiếp tục: đang chờ lượt hoặc khóa cũ, hay thiếu dữ kiện nguồn')
+      if (!view.canContinue || view.phase === 'draining' || orphans.some(o => o.root === root)) throw gitError('INVALID_STATE', tr('Chưa thể tiếp tục: đang chờ lượt hoặc khóa cũ, hay thiếu dữ kiện nguồn'))
       const pending = origin ? structuredClone(origin.pending) : storedPending(record)
       const targets = []
       for (const p of pending.filter(p => !p.uncertain)) {
         const agent = core.team(root).find(a => a.name === p.agent)
-        if (!agent) throw gitError('CONFIG_ERROR', 'Agent cần tiếp tục không còn trong nhóm: ' + p.agent)
+        if (!agent) throw gitError('CONFIG_ERROR', tr('Agent cần tiếp tục không còn trong nhóm: {agent}', { agent: p.agent }))
         targets.push({ agent, pending: p, sources: await sourceMessages(root, p.sourceRefs) })
       }
-      if (!targets.length) throw gitError('UNAVAILABLE', 'Không có công việc chắc chắn chưa chạy; hãy kiểm tra log và gửi yêu cầu mới')
+      if (!targets.length) throw gitError('UNAVAILABLE', tr('Không có công việc chắc chắn chưa chạy; hãy kiểm tra log và gửi yêu cầu mới'))
       // Recheck after source IO, before the one atomic claim and any side effect.
       const concurrentClaim = readControlStore(root).claims[claimKey]
       if (concurrentClaim) return { chainId: concurrentClaim.childChainId, alreadyContinued: true, state: readControlStore(root).stops[stopId].state }
-      if ((origin && !getChainView(root, origin).canContinue) || orphans.some(o => o.root === root)) throw gitError('INVALID_STATE', 'Chuỗi chưa sẵn sàng')
+      if ((origin && !getChainView(root, origin).canContinue) || orphans.some(o => o.root === root)) throw gitError('INVALID_STATE', tr('Chuỗi chưa sẵn sàng'))
       let created = false
       const claim = updateControlStore(root, store => {
         if (store.claims[claimKey]) return store.claims[claimKey]
@@ -2684,11 +2687,11 @@ ipcMain.handle('continueChain', (event, dir, request) => {
       const child = newChain(root, { id: claim.childChainId })
       child.pending = pending.filter(p => p.uncertain)
       try {
-        await postOnce(root, 'continue:' + stopId, 'system', `Tiếp tục chuỗi với ${targets.map(t => '@' + t.agent.name).join(' ')}.`,
+        await postOnce(root, 'continue:' + stopId, 'system', tr('Tiếp tục chuỗi với {agents}.', { agents: targets.map(t => '@' + t.agent.name).join(' ') }),
           { kind: 'chain-continue', continuedFrom: stop.seq, stopId, childChainId: child.id, targets: targets.map(t => t.agent.name) })
         for (const target of targets) {
           if (child.state !== 'active' || child.turns + child.reservedTurns >= child.chainLimit) {
-            child.state = 'halting'; child.haltReason ||= { code: 'turn-limit', text: `Dừng sau ${child.chainLimit} lượt agent liên tiếp.` }
+            child.state = 'halting'; child.haltReason ||= { code: 'turn-limit', text: tr('Dừng sau {n} lượt agent liên tiếp.', { n: child.chainLimit }) }
             mergePending(child.pending, target.pending)
             continue
           }
@@ -2706,7 +2709,7 @@ ipcMain.handle('continueChain', (event, dir, request) => {
           }
         }
         if (child.pending.length && !child.stopPosted) await haltChain(root, child,
-          child.haltReason || { code: 'restart-interrupted', text: 'Còn công việc chưa cấp hoặc chưa rõ kết quả; kiểm tra trước khi tiếp tục.' }, child.pending.map(p => ({ name: p.agent })))
+          child.haltReason || { code: 'restart-interrupted', text: tr('Còn công việc chưa cấp hoặc chưa rõ kết quả; kiểm tra trước khi tiếp tục.') }, child.pending.map(p => ({ name: p.agent })))
       } catch (e) { activeChains.delete(child.id); await recoverChainControl(root); throw e }
       const state = readControlStore(root).stops[stopId].state
       win?.webContents.send('chain-changed', root, state)
@@ -2732,7 +2735,7 @@ ipcMain.handle('send', async (event, dir, text) => {
   const root = knownProject(dir), msg = await post(root, 'user', text)
   trustDeclined.delete(root) // a new message from the user may answer the config dialog differently
   // the message is posted: from here on a failure goes into the chat, never back to the input (resending would duplicate it)
-  try { await route(root, msg, 0) } catch (e) { await post(root, 'system', `Chưa gọi được agent: ${e.message}`, { kind: 'route-error' }) }
+  try { await route(root, msg, 0) } catch (e) { await post(root, 'system', tr('Chưa gọi được agent: {error}', { error: e.message }), { kind: 'route-error' }) }
   scheduleSummary(root).catch(e => console.error(e))
 })
 // Taking a message back: agents get "(tin đã được thu hồi)" in its place from now on, and turns that only this message asked
@@ -2741,11 +2744,11 @@ ipcMain.handle('retract', (event, dir, seq) => {
   validSender(event)
   return apiCall(async () => {
     const root = knownProject(dir), index = await core.getLogIndex(root)
-    if (!Number.isInteger(seq) || index.records[seq]?.from !== 'user') throw gitError('INVALID_ARGUMENT', 'Chỉ thu hồi được tin của bạn')
-    if (index.retracted.has(seq)) throw gitError('CONFLICT', 'Tin này đã được thu hồi')
+    if (!Number.isInteger(seq) || index.records[seq]?.from !== 'user') throw gitError('INVALID_ARGUMENT', tr('Chỉ thu hồi được tin của bạn'))
+    if (index.retracted.has(seq)) throw gitError('CONFLICT', tr('Tin này đã được thu hồi'))
     const [msg] = (await core.logPage(root, { around: seq, limit: 1 })).messages
-    const at = new Date(msg.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-    await post(root, 'system', `Tin lúc ${at} của End-User đã được thu hồi; bỏ qua yêu cầu trong tin đó.`, { kind: 'retract', target: seq })
+    const at = new Date(msg.at).toLocaleTimeString(i18n.locale(), { hour: '2-digit', minute: '2-digit' })
+    await post(root, 'system', tr('Tin lúc {at} của End-User đã được thu hồi; bỏ qua yêu cầu trong tin đó.', { at }), { kind: 'retract', target: seq })
     for (const job of [...jobs]) if (job.root === root && !job.finished && job.reasons?.delete(seq) && !job.reasons.size) stopJob(job, 'stopped')
     return { text: msg.text }
   })
@@ -2762,7 +2765,7 @@ ipcMain.handle('saveImage', (event, dir, data) => { validSender(event); return a
 const TREE_LIMIT = 5000, DIFF_LIMIT = 512 * 1024
 function treeSource(root, source) {
   if (source?.commit != null) {
-    if (!/^[0-9a-f]{40}$/.test(source.commit)) throw gitError('INVALID_ARGUMENT', 'Commit không hợp lệ')
+    if (!/^[0-9a-f]{40}$/.test(source.commit)) throw gitError('INVALID_ARGUMENT', tr('Commit không hợp lệ'))
     return { cwd: root, commit: source.commit, workspaceId: null }
   }
   const workspaceId = source?.workspace || null
@@ -2813,7 +2816,7 @@ async function projectTree(root, source) {
 
 async function fileDiff(root, source, file) {
   if (typeof file !== 'string' || !file || file.includes('\0') || path.isAbsolute(file) || file.split('/').includes('..') || isChatPath(file))
-    throw gitError('INVALID_ARGUMENT', 'Đường dẫn không hợp lệ')
+    throw gitError('INVALID_ARGUMENT', tr('Đường dẫn không hợp lệ'))
   const { cwd, commit, workspaceId } = treeSource(root, source)
   const flags = ['--no-color', '--no-ext-diff', '--no-textconv'], big = { maxBuffer: 8 * 1024 * 1024 }
   let text = (await git(cwd, commit ? ['show', ...flags, '--diff-merges=first-parent', '--format=', commit, '--', file]
@@ -2842,16 +2845,16 @@ ipcMain.handle('createHtmlPreview', async (event, dir, href, fromFile, workspace
     const root = knownProject(dir), target = viewerTarget(root, href, fromFile, workspaceId)
     const ext = path.extname(target.href.split(/[?#]/, 1)[0]).toLowerCase()
     if (ext !== '.html' && ext !== '.htm') {
-      return { ok: false, code: 'UNSUPPORTED', message: 'Chỉ xem trước file HTML' }
+      return { ok: false, code: 'UNSUPPORTED', message: tr('Chỉ xem trước file HTML') }
     }
     const readRes = await core.readProjectFile(target.base, target.href, target.fromFile)
     if (!readRes.ok) return { ok: false, code: readRes.code, message: readRes.message }
     const fileExt = path.extname(readRes.file.path).toLowerCase()
     if (fileExt !== '.html' && fileExt !== '.htm') {
-      return { ok: false, code: 'UNSUPPORTED', message: 'Chỉ xem trước file HTML' }
+      return { ok: false, code: 'UNSUPPORTED', message: tr('Chỉ xem trước file HTML') }
     }
     if (myGen !== previewGen) {
-      return { ok: false, code: 'PREVIEW_EXPIRED', message: 'Phiên xem trước đã bị thay thế' }
+      return { ok: false, code: 'PREVIEW_EXPIRED', message: tr('Phiên xem trước đã bị thay thế') }
     }
     closeCurrentPreview()
     const token = randomBytes(16).toString('hex')
@@ -2885,7 +2888,7 @@ ipcMain.handle('createHtmlPreview', async (event, dir, href, fromFile, workspace
     }
   } catch (e) {
     const code = ['INVALID_PATH', 'OUTSIDE_PROJECT', 'NOT_FOUND', 'UNSUPPORTED', 'TOO_LARGE', 'FILE_CHANGED'].includes(e.code) ? e.code : 'IO_ERROR'
-    return { ok: false, code, message: e.message || 'Không tạo được xem trước HTML' }
+    return { ok: false, code, message: e.message || tr('Không tạo được xem trước HTML') }
   }
 })
 ipcMain.handle('closeHtmlPreview', (event, previewId) => {
@@ -2904,50 +2907,50 @@ ipcMain.handle('openHtmlExternal', async (event, dir, href, workspaceId = null) 
     const fileInfo = core.resolveProjectFile(target.base, target.href)
     const ext = path.extname(fileInfo.real).toLowerCase()
     if (ext !== '.html' && ext !== '.htm') {
-      return { ok: false, code: 'UNSUPPORTED', message: 'Chỉ hỗ trợ mở file HTML' }
+      return { ok: false, code: 'UNSUPPORTED', message: tr('Chỉ hỗ trợ mở file HTML') }
     }
     const statBefore = rawFs.statSync(fileInfo.real)
-    const branchInfo = target.workspace?.branch ? ` (nhánh ${target.workspace.branch})` : ''
+    const shownFile = target.workspace?.branch ? tr('{file} (nhánh {branch})', { file: fileInfo.relative, branch: target.workspace.branch }) : fileInfo.relative
     const answer = await dialog.showMessageBox(win, {
       type: 'question',
-      buttons: ['Huỷ', 'Mở'],
+      buttons: [tr('Huỷ'), tr('Mở')],
       defaultId: 1,
       cancelId: 0,
-      message: 'Mở HTML bằng ứng dụng mặc định?',
-      detail: `File: ${fileInfo.relative}${branchInfo}\nJavaScript và truy cập mạng có thể hoạt động.`
+      message: tr('Mở HTML bằng ứng dụng mặc định?'),
+      detail: tr('File: {file}\nJavaScript và truy cập mạng có thể hoạt động.', { file: shownFile })
     })
     if (answer.response !== 1) return { ok: true, opened: false }
     const verified = core.resolveProjectFile(target.base, target.href)
     const statAfter = rawFs.statSync(verified.real)
     if (verified.real !== fileInfo.real || statAfter.dev !== statBefore.dev || statAfter.ino !== statBefore.ino) {
-      return { ok: false, code: 'FILE_CHANGED', message: 'File thay đổi trong lúc xác nhận' }
+      return { ok: false, code: 'FILE_CHANGED', message: tr('File thay đổi trong lúc xác nhận') }
     }
     const verifiedExt = path.extname(verified.real).toLowerCase()
     if (verifiedExt !== '.html' && verifiedExt !== '.htm') {
-      return { ok: false, code: 'UNSUPPORTED', message: 'Chỉ hỗ trợ mở file HTML' }
+      return { ok: false, code: 'UNSUPPORTED', message: tr('Chỉ hỗ trợ mở file HTML') }
     }
     const error = await shell.openPath(verified.real)
     if (error) return { ok: false, code: 'IO_ERROR', message: error }
     return { ok: true, opened: true }
   } catch (e) {
     const code = ['INVALID_PATH', 'OUTSIDE_PROJECT', 'NOT_FOUND', 'UNSUPPORTED', 'TOO_LARGE', 'FILE_CHANGED'].includes(e.code) ? e.code : 'IO_ERROR'
-    return { ok: false, code, message: e.message || 'Không mở được file' }
+    return { ok: false, code, message: e.message || tr('Không mở được file') }
   }
 })
 ipcMain.handle('watchProject', (event, dir, file, workspaceId) => { validSender(event); return watchProject(dir, file, workspaceId) })
 ipcMain.handle('openFile', async (event, dir, file, workspaceId) => { validSender(event); const error = await shell.openPath(resolveFile(dir, file, workspaceId)); if (error) throw new Error(error) })
 ipcMain.handle('openLink', async (event, dir, href, text = null) => {
   validSender(event)
-  if (typeof href !== 'string' || !href || /[\0-\x1f\x7f]/.test(href) || href.startsWith('//')) throw new Error('Liên kết không hợp lệ')
+  if (typeof href !== 'string' || !href || /[\0-\x1f\x7f]/.test(href) || href.startsWith('//')) throw new Error(tr('Liên kết không hợp lệ'))
   let url
   try { url = new URL(href) } catch {}
   if (url) {
-    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) throw new Error('Chỉ hỗ trợ liên kết http/https')
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) throw new Error(tr('Chỉ hỗ trợ liên kết http/https'))
     // agent-written markdown can label a link "reports/plan.md" and point it anywhere: show where it really goes
     const shown = typeof text === 'string' ? text.trim() : ''
     if (shown && shown !== href && shown !== url.href) {
-      const answer = await dialog.showMessageBox(win, { type: 'question', buttons: ['Huỷ', 'Mở'], defaultId: 1, cancelId: 0,
-        message: `Mở liên kết ngoài ${url.hostname}?`, detail: `Chữ hiển thị: ${shown.slice(0, 200)}\nĐịa chỉ thật: ${url.href.slice(0, 500)}` })
+      const answer = await dialog.showMessageBox(win, { type: 'question', buttons: [tr('Huỷ'), tr('Mở')], defaultId: 1, cancelId: 0,
+        message: tr('Mở liên kết ngoài {host}?', { host: url.hostname }), detail: tr('Chữ hiển thị: {text}\nĐịa chỉ thật: {url}', { text: shown.slice(0, 200), url: url.href.slice(0, 500) }) })
       if (answer.response !== 1) return
     }
     return shell.openExternal(url.href)
@@ -2959,19 +2962,19 @@ ipcMain.handle('saveTeam', (event, dir, members, request) => {
   validSender(event)
   return apiCall(async () => {
     const root = knownProject(dir)
-    if (!request || typeof request.expectedRevision !== 'string') throw gitError('INVALID_ARGUMENT', 'Thiếu revision cấu hình nhóm')
+    if (!request || typeof request.expectedRevision !== 'string') throw gitError('INVALID_ARGUMENT', tr('Thiếu revision cấu hình nhóm'))
     let revision = core.teamRevision(root), before = core.team(root)
-    if (request.expectedRevision !== revision) throw gitError('CONFLICT', 'Cấu hình nhóm đã thay đổi, hãy tải lại')
+    if (request.expectedRevision !== revision) throw gitError('CONFLICT', tr('Cấu hình nhóm đã thay đổi, hãy tải lại'))
     let next = core.normalizeTeam(root, members)
     guardTeamChange(root, before, next)
     const escalations = fullEscalations(before, next)
     if (escalations.length) {
-      const answer = await dialog.showMessageBox(win, { type: 'warning', buttons: ['Huỷ', 'Bật Toàn quyền'], defaultId: 0, cancelId: 0,
-        message: `Bật Toàn quyền cho ${escalations.map(agent => `${agent.name} (${agent.cli})`).join(', ')}?`,
-        detail: `Dự án: ${root}\nAgent có thể chạy lệnh, dùng mạng và tác động tới file ngoài dự án theo quyền tài khoản máy. Phạm vi file của app không phải sandbox bảo vệ hệ điều hành.` })
-      if (answer.response !== 1) throw gitError('CANCELLED', 'Đã huỷ bật Toàn quyền')
+      const answer = await dialog.showMessageBox(win, { type: 'warning', buttons: [tr('Huỷ'), tr('Bật Toàn quyền')], defaultId: 0, cancelId: 0,
+        message: tr('Bật Toàn quyền cho {agents}?', { agents: escalations.map(agent => `${agent.name} (${agent.cli})`).join(', ') }),
+        detail: tr('Dự án: {root}\nAgent có thể chạy lệnh, dùng mạng và tác động tới file ngoài dự án theo quyền tài khoản máy. Phạm vi file của app không phải sandbox bảo vệ hệ điều hành.', { root }) })
+      if (answer.response !== 1) throw gitError('CANCELLED', tr('Đã huỷ bật Toàn quyền'))
       revision = core.teamRevision(root); before = core.team(root)
-      if (request.expectedRevision !== revision) throw gitError('CONFLICT', 'Cấu hình nhóm đã thay đổi trong lúc xác nhận')
+      if (request.expectedRevision !== revision) throw gitError('CONFLICT', tr('Cấu hình nhóm đã thay đổi trong lúc xác nhận'))
       next = core.normalizeTeam(root, members); guardTeamChange(root, before, next)
     }
     const saved = core.saveTeam(root, next), data = emitTeam(root, saved)
@@ -2986,16 +2989,16 @@ ipcMain.handle('grantPermissionAndRetry', (event, dir, input) => {
     if (!input || typeof input !== 'object' || Array.isArray(input)
       || Object.keys(input).sort().join('\0') !== 'denialId\0requestId'
       || typeof input.requestId !== 'string' || typeof input.denialId !== 'string')
-      throw gitError('INVALID_ARGUMENT', 'Yêu cầu cấp quyền không hợp lệ')
+      throw gitError('INVALID_ARGUMENT', tr('Yêu cầu cấp quyền không hợp lệ'))
     const entry = [...pendingPermissions.entries()].find(([, item]) => item.root === root && item.id === input.requestId)
-    if (!entry) throw gitError('EXPIRED', 'Yêu cầu cấp quyền đã hết hiệu lực; hãy gửi lại yêu cầu')
+    if (!entry) throw gitError('EXPIRED', tr('Yêu cầu cấp quyền đã hết hiệu lực; hãy gửi lại yêu cầu'))
     const [key, request] = entry, denial = request.denials.find(item => item.id === input.denialId)
-    if (!pendingValid(request)) { pendingPermissions.delete(key); emitPermissions(root); throw gitError('EXPIRED', 'Yêu cầu cấp quyền đã hết hiệu lực') }
-    if (request.reserved || permissionReservations.has(key)) throw gitError('BUSY', 'Yêu cầu cấp quyền đang được xử lý')
-    if (!denial?.canGrant || !denial.rule) throw gitError('UNSUPPORTED', denial?.reason || 'Không thể tự cấp quyền này')
+    if (!pendingValid(request)) { pendingPermissions.delete(key); emitPermissions(root); throw gitError('EXPIRED', tr('Yêu cầu cấp quyền đã hết hiệu lực')) }
+    if (request.reserved || permissionReservations.has(key)) throw gitError('BUSY', tr('Yêu cầu cấp quyền đang được xử lý'))
+    if (!denial?.canGrant || !denial.rule) throw gitError('UNSUPPORTED', denial?.reason || tr('Không thể tự cấp quyền này'))
     const members = core.team(root), agent = members.find(item => item.name === request.agent)
     if (!agent || agent.cli !== request.cli || agent.permissions.mode === 'full' || core.permissionRules(agent).includes(denial.rule))
-      throw gitError('CONFLICT', 'Quyền hoặc agent đã thay đổi')
+      throw gitError('CONFLICT', tr('Quyền hoặc agent đã thay đổi'))
     const permissions = { ...agent.permissions, mode: 'custom',
       allowTools: agent.permissions.mode === 'custom' ? [...new Set([...agent.permissions.allowTools, denial.rule])] : [denial.rule] }
     const next = core.normalizeTeam(root, members.map(item => item.name === agent.name ? { ...item, permissions } : item))
@@ -3028,7 +3031,8 @@ ipcMain.handle('accounts', event => { validSender(event); return core.accounts()
 ipcMain.handle('about', event => {
   validSender(event)
   let changelog = ''
-  try { changelog = fs.readFileSync(path.join(__dirname, 'CHANGELOG.md'), 'utf8') } catch {}
+  const names = i18n.lang() === 'vi' ? ['CHANGELOG.md'] : [`CHANGELOG.${i18n.lang()}.md`, 'CHANGELOG.md']
+  for (const name of names) { try { changelog = fs.readFileSync(path.join(__dirname, name), 'utf8'); break } catch {} }
   const { author, license, homepage } = require('./package.json')
   return { version: app.getVersion(), author, license, homepage, changelog }
 })
@@ -3043,7 +3047,7 @@ function applyCliPaths() {
   core.setCliPaths(Object.fromEntries(core.CLI_BINS.map(bin => [bin, saved[bin] || found[bin][0]])))
   return { bins: core.CLI_BINS.map(bin => ({ bin, path: typeof saved[bin] === 'string' ? saved[bin] : null, found: found[bin] })), accounts: core.accounts() }
 }
-const cliBin = bin => { if (!core.CLI_BINS.includes(bin)) throw new Error('CLI không hợp lệ'); return bin }
+const cliBin = bin => { if (!core.CLI_BINS.includes(bin)) throw new Error(tr('CLI không hợp lệ')); return bin }
 ipcMain.handle('cliSettings', event => { validSender(event); return applyCliPaths() })
 ipcMain.handle('setCliPath', (event, bin, file) => {
   validSender(event)
@@ -3051,14 +3055,14 @@ ipcMain.handle('setCliPath', (event, bin, file) => {
     const saved = savedCliPaths()
     if (file == null) delete saved[cliBin(bin)]
     else if (typeof file === 'string' && path.isAbsolute(file) && fs.statSync(file, { throwIfNoEntry: false })?.isFile()) saved[cliBin(bin)] = file
-    else throw new Error('Không phải file chạy được')
+    else throw new Error(tr('Không phải file chạy được'))
     core.atomicWrite(cliPathsFile(), JSON.stringify(saved, null, 2))
     return applyCliPaths()
   })
 })
 ipcMain.handle('pickCliPath', async (event, bin) => {
   validSender(event)
-  const picked = await dialog.showOpenDialog(win, { title: `Chọn file chạy của ${cliBin(bin)}`, properties: ['openFile', 'showHiddenFiles'] })
+  const picked = await dialog.showOpenDialog(win, { title: tr('Chọn file chạy của {cli}', { cli: cliBin(bin) }), properties: ['openFile', 'showHiddenFiles'] })
   return picked.canceled ? null : picked.filePaths[0]
 })
 ipcMain.handle('checkClis', (event, bin) => {
@@ -3072,7 +3076,7 @@ ipcMain.handle('sessions', (event, dir) => {
 ipcMain.handle('cliSessions', (event, cli, dir, agentName) => {
   validSender(event)
   const root = knownProject(dir), enabled = core.projectSettings(root).settings.worktreesEnabled
-  if (enabled && !agentName) throw gitError('INVALID_ARGUMENT', 'Cần chọn agent khi worktree đang bật')
+  if (enabled && !agentName) throw gitError('INVALID_ARGUMENT', tr('Cần chọn agent khi worktree đang bật'))
   const context = agentName ? agentSessionContext(root, agentName) : { cwd: root, workspaceId: null }
   if (!context.cwd) return []
   return core.cliSessions(cli, context.cwd)
@@ -3083,13 +3087,13 @@ ipcMain.handle('useSession', async (event, dir, name, cli, id, workspaceId = nul
   const root = knownProject(dir)
   const busy = () => jobs.some(j => j.root === root && j.name === name) || orphans.some(o => o.root === root && o.name === name)
     || permissionReservations.has(permissionKey(root, name))
-  if (busy()) throw new Error(`@${name} còn lượt, khóa cũ hoặc thao tác cấp quyền`)
+  if (busy()) throw new Error(tr('@{agent} còn lượt, khóa cũ hoặc thao tác cấp quyền', { agent: name }))
   let context = agentSessionContext(root, name)
-  if (context.workspaceId !== workspaceId) throw gitError('INVALID_ARGUMENT', 'Workspace của phiên không còn đúng')
+  if (context.workspaceId !== workspaceId) throw gitError('INVALID_ARGUMENT', tr('Workspace của phiên không còn đúng'))
   const index = await core.getLogIndex(root)
-  if (busy()) throw new Error(`@${name} còn lượt, khóa cũ hoặc thao tác cấp quyền`)
+  if (busy()) throw new Error(tr('@{agent} còn lượt, khóa cũ hoặc thao tác cấp quyền', { agent: name }))
   context = agentSessionContext(root, name)
-  if (context.workspaceId !== workspaceId) throw gitError('INVALID_ARGUMENT', 'Workspace của phiên không còn đúng')
+  if (context.workspaceId !== workspaceId) throw gitError('INVALID_ARGUMENT', tr('Workspace của phiên không còn đúng'))
   core.setSession(dir, name, { id, cli, seen: index.records.length, seenHash: index.prefixHashes[index.records.length], at: new Date().toISOString(), adopted: true }, context.workspaceId)
   clearPending(root, name)
   emitSessions(root)
@@ -3098,7 +3102,7 @@ ipcMain.handle('resetSession', (event, dir, name) => {
   validSender(event)
   const root = knownProject(dir), busy = [...jobs, ...orphans].some(x => x.root === root && (!name || x.name === name))
     || [...permissionReservations.keys()].some(key => key.startsWith(root + '\0') && (!name || key === permissionKey(root, name)))
-  if (busy) throw new Error(name ? `@${name} còn lượt hoặc khóa cũ` : 'Box đang có lượt hoặc khóa cũ')
+  if (busy) throw new Error(name ? tr('@{agent} còn lượt hoặc khóa cũ', { agent: name }) : tr('Box đang có lượt hoặc khóa cũ'))
   if (name) core.setSession(dir, name, null, agentSessionContext(root, name).workspaceId)
   else {
     core.setSession(dir, null, null)
@@ -3109,7 +3113,7 @@ ipcMain.handle('resetSession', (event, dir, name) => {
 }) // name null → reset all
 ipcMain.handle('stop', (event, dir, name, runId) => {
   validSender(event)
-  if (![dir, name, runId].every(v => typeof v === 'string' && v)) throw new Error('Tham số Dừng không hợp lệ')
+  if (![dir, name, runId].every(v => typeof v === 'string' && v)) throw new Error(tr('Tham số Dừng không hợp lệ'))
   const root = knownProject(dir), job = jobs.find(j => j.root === root && j.name === name && j.runId === runId)
   return { accepted: job ? stopJob(job, 'stopped') : false }
 })
@@ -3120,8 +3124,8 @@ ipcMain.handle('releaseLock', async (event, dir, runId) => {
   const state = orphanState(lock.pgid)
   if (state === 'alive') { lock.state = 'alive'; sendLocks(root); scheduleOrphanProbe(); return { released: false } }
   if (state !== 'dead') {
-    const answer = await dialog.showMessageBox(win, { type: 'warning', buttons: ['Huỷ', 'Giải phóng'], defaultId: 0, cancelId: 0,
-      message: 'Chỉ giải phóng sau khi bạn đã kiểm tra CLI cũ không còn chạy.', detail: `Agent: ${lock.name}\nRun: ${lock.runId}` })
+    const answer = await dialog.showMessageBox(win, { type: 'warning', buttons: [tr('Huỷ'), tr('Giải phóng')], defaultId: 0, cancelId: 0,
+      message: tr('Chỉ giải phóng sau khi bạn đã kiểm tra CLI cũ không còn chạy.'), detail: `Agent: ${lock.name}\nRun: ${lock.runId}` })
     if (answer.response !== 1) return { released: false }
   }
   if (lock.kind === 'integration') pauseInterruptedMerge(root, lock.runId)
@@ -3137,11 +3141,32 @@ const windowBg = () => nativeTheme.shouldUseDarkColors ? '#151517' : '#f7f7f8' /
 ipcMain.handle('theme', (event, source) => {
   validSender(event)
   if (source != null) {
-    if (!THEMES.includes(source)) throw new Error('Giao diện không hợp lệ')
+    if (!THEMES.includes(source)) throw new Error(tr('Giao diện không hợp lệ'))
     nativeTheme.themeSource = source
     try { core.atomicWrite(themeFile(), JSON.stringify(source)) } catch {}
   }
   return nativeTheme.themeSource
+})
+
+// interface language: userData/language.json; the page reads it synchronously before drawing, and reloads after a change
+const languageFile = () => path.join(app.getPath('userData'), 'language.json')
+function loadLanguage() {
+  try { const saved = JSON.parse(fs.readFileSync(languageFile(), 'utf8')); if (i18n.LANGS.includes(saved)) return i18n.setLang(saved) } catch {}
+  const system = (app.getPreferredSystemLanguages?.() || [app.getLocale?.()]).filter(Boolean)
+  return i18n.setLang(system.length ? i18n.pick(system) : 'vi')
+}
+ipcMain.on('language', event => {
+  try { validSender(event); event.returnValue = i18n.lang() } catch { event.returnValue = null } // a sync call must always get a reply
+})
+ipcMain.handle('setLanguage', (event, lang) => {
+  validSender(event)
+  if (!i18n.LANGS.includes(lang)) throw new Error(tr('Ngôn ngữ không hợp lệ'))
+  i18n.setLang(lang)
+  try { core.atomicWrite(languageFile(), JSON.stringify(lang)) } catch {}
+  setMenu()
+  // the page redraws in the new language; a reload the page starts itself is a navigation, which will-navigate refuses
+  setTimeout(() => { if (win && !win.isDestroyed()) { closeCurrentPreview(); win.webContents.reload() } })
+  return i18n.lang()
 })
 
 // size/position survive restarts; a spot on a screen that's gone (unplugged monitor) falls back to the default
@@ -3159,21 +3184,21 @@ function savedBounds() {
 // menu items only tell the renderer: it owns the dialogs and the open box
 function setMenu() {
   const send = action => () => win?.webContents.send('menu', action)
-  const settings = { label: 'Cài đặt nhóm…', accelerator: 'CmdOrCtrl+,', click: send('settings') }
-  const about = { label: 'Giới thiệu Agent Chat', click: send('about') } // own dialog: version, author, changelog on both OSes
-  const appSettings = { label: 'Cài đặt chung…', click: send('app-settings') }
+  const settings = { label: tr('Cài đặt nhóm…'), accelerator: 'CmdOrCtrl+,', click: send('settings') }
+  const about = { label: tr('Giới thiệu Agent Chat'), click: send('about') } // own dialog: version, author, changelog on both OSes
+  const appSettings = { label: tr('Cài đặt chung…'), click: send('app-settings') }
   const mac = process.platform === 'darwin'
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     mac ? { label: app.name, submenu: [about, { type: 'separator' }, appSettings, settings, { type: 'separator' }, { role: 'services' },
       { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }
-      : { label: 'Tệp', submenu: [about, appSettings, settings, { type: 'separator' }, { role: 'quit' }] },
+      : { label: tr('Tệp'), submenu: [about, appSettings, settings, { type: 'separator' }, { role: 'quit' }] },
     { role: 'editMenu' },
-    { label: 'Đi tới', submenu: [
-      { label: 'Chuyển không gian…', accelerator: 'CmdOrCtrl+K', click: send('switch') },
-      { label: 'Box tiếp theo đang cần bạn', accelerator: 'CmdOrCtrl+J', click: send('next-need') },
-      { label: 'Tìm trong lịch sử', accelerator: 'CmdOrCtrl+F', click: send('search') },
-      { label: 'Timeline agent', accelerator: 'CmdOrCtrl+Shift+T', click: send('timeline') }] },
-    { label: 'Xem', submenu: [{ role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' },
+    { label: tr('Đi tới'), submenu: [
+      { label: tr('Chuyển không gian…'), accelerator: 'CmdOrCtrl+K', click: send('switch') },
+      { label: tr('Box tiếp theo đang cần bạn'), accelerator: 'CmdOrCtrl+J', click: send('next-need') },
+      { label: tr('Tìm trong lịch sử'), accelerator: 'CmdOrCtrl+F', click: send('search') },
+      { label: tr('Timeline agent'), accelerator: 'CmdOrCtrl+Shift+T', click: send('timeline') }] },
+    { label: tr('Xem'), submenu: [{ role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' },
       ...(app.isPackaged ? [] : [{ type: 'separator' }, { role: 'reload' }, { role: 'toggleDevTools' }])] },
     { role: 'windowMenu' },
   ]))
@@ -3183,6 +3208,7 @@ const singleInstance = app.requestSingleInstanceLock()
 if (!singleInstance) app.quit()
 else app.whenReady().then(() => {
   core.setTrustFile(path.join(app.getPath('userData'), 'trust.json'))
+  loadLanguage()
   applyCliPaths()
   for (const dir of projects()) loadOrphans(dir)
   setMenu()
@@ -3284,11 +3310,11 @@ else app.whenReady().then(() => {
   // answers and the queue are lost, so ask first. Cmd+Q closes the window too, so this covers both.
   win.on('close', event => {
     const busy = [...new Set(jobs.filter(job => !job.finished).map(job => `@${job.name}`))]
-    if (mergeWorkers.size) busy.push('kiểm tra gộp')
+    if (mergeWorkers.size) busy.push(tr('kiểm tra gộp'))
     if (!busy.length) return
-    const answer = dialog.showMessageBoxSync(win, { type: 'warning', buttons: ['Ở lại', 'Vẫn thoát'], defaultId: 0, cancelId: 0,
-      message: `${busy.join(', ')} vẫn đang chạy hoặc chờ`,
-      detail: 'App không dừng tiến trình: CLI vẫn chạy ngầm và có thể tiếp tục sửa file, nhưng câu trả lời và hàng chờ của lượt này sẽ mất.' })
+    const answer = dialog.showMessageBoxSync(win, { type: 'warning', buttons: [tr('Ở lại'), tr('Vẫn thoát')], defaultId: 0, cancelId: 0,
+      message: tr('{busy} vẫn đang chạy hoặc chờ', { busy: busy.join(', ') }),
+      detail: tr('App không dừng tiến trình: CLI vẫn chạy ngầm và có thể tiếp tục sửa file, nhưng câu trả lời và hàng chờ của lượt này sẽ mất.') })
     if (answer !== 1) event.preventDefault()
   })
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
